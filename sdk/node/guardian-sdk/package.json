@@ -1,0 +1,32 @@
+{
+  "name": "guardian-sdk",
+  "version": "0.1.0",
+  "description": "Argus Guardian SDK for Node.js",
+  "type": "module",
+  "main": "dist/index.js",
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "shx mkdir -p dist && shx cp src/index.js dist/index.js",
+    "prepublishOnly": "npm run build"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/your-org/guardian.git"
+  },
+  "author": "Argus Guardian",
+  "keywords": ["guardian", "security", "moderation"],
+  "license": "MIT",
+  "devDependencies": {
+    "shx": "^0.3.4"
+  }
+}
+
+
