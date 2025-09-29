@@ -1,15 +1,18 @@
 """
 Tests for the Guardian Python SDK.
 
-These tests require the `guardian_sdk` to be installed in development mode.
-Run `pip install -e ./sdk/python` from the root directory to install it.
+These tests require the SDK to be installed. For PyPI/TestPyPI builds, install:
+    pip install guardian-securitysdk==0.2.1
+
+For local development mode, run from repo root:
+    pip install -e ./sdk/python
 """
 
 import pytest
 
-# Attempt to import the SDK and provide a helpful error message if it fails
+# Attempt to import the SDK from the new package name
 try:
-    from guardian_sdk import (
+    from guardian_securitysdk import (
         Guardian,
         GuardianConfig,
         GuardianAPIError,
@@ -19,8 +22,8 @@ try:
     )
 except ImportError:
     pytest.fail(
-        "The `guardian_sdk` is not installed. "
-        "Please run `pip install -e ./sdk/python` from the root directory."
+        "The SDK is not installed. Install via `pip install guardian-securitysdk==0.2.1` "
+        "or run `pip install -e ./sdk/python` from the repository root."
     )
 
 import httpx

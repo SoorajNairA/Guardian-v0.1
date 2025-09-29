@@ -1,4 +1,4 @@
-from .client import (
+from ..guardian_sdk import (
     Guardian,
     GuardianConfig,
     GuardianError,
@@ -18,4 +18,3 @@ __all__ = [
     "GuardianValidationError",
 ]
 
-__version__ = "0.2.1"
