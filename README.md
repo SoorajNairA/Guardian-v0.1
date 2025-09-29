@@ -1,148 +1,199 @@
-# Guardian v0.1
+# Guardian API
 
-Argus Guardian is a FastAPI-based moderation service that detects malicious or policy-violating text using heuristics with optional Gemini enrichment, logs to Supabase, and provides Python/Node SDKs. A localhost-only dev panel shows live metrics.
+**Guardian** is a high-performance, AI-powered API for real-time threat detection in text content. It provides a robust, scalable, and easy-to-integrate solution for identifying a wide range of security risks before they can harm your users or your platform.
 
-## Features
+[![CI](https://github.com/your-org/guardian/actions/workflows/ci.yml/badge.svg)](https://github.com/your-org/guardian/actions/workflows/ci.yml)
 
-- FastAPI `/v1/analyze` with risk score and threat categories
-- Heuristic classifier + optional Gemini enrichment (fallback safe)
-- API key auth (hashed lookup in Supabase, env fallback)
-- Supabase logging (RLS-ready schema included)
-- SDKs: Python (`guardian-sdk`), Node (`guardian-sdk`)
-- Localhost-only dev panel at `/dev`
+## Table of Contents
 
-## Requirements
+- [Key Features](#key-features)
+- [Threat Detection Categories](#threat-detection-categories)
+- [System Architecture](#system-architecture)
+- [Getting Started](#getting-started)
+  - [Requirements](#requirements)
+  - [Environment Variables](#environment-variables)
+  - [Running the API Locally](#running-the-api-locally)
+- [Documentation](#documentation)
+- [SDKs](#sdks)
+- [Deployment](#deployment)
+- [Monitoring & Observability](#monitoring--observability)
+- [Testing](#testing)
+- [Contributing](#contributing)
+- [License](#license)
+
+## Key Features
+
+- **Comprehensive Threat Detection**: Identifies 14 categories of threats, from phishing and malware instructions to PII exfiltration and prompt injection.
+- **Multi-Language Support**: Core detection patterns are optimized for English, Spanish, French, German, and Portuguese.
+- **AI-Powered Enrichment**: Uses Google's Gemini model to provide deeper analysis, confidence scoring, and AI-generated text detection.
+- **High Performance**: Built with FastAPI and designed for low-latency, high-throughput workloads.
+- **Scalable & Resilient**: Features distributed rate limiting, caching, and robust error handling with automatic retries.
+- **Production-Ready**: Comes with structured logging, comprehensive monitoring, and a flexible alerting system.
+- **Easy Integration**: Provides official Python and Node.js SDKs with a clean, modern API.
+
+## Threat Detection Categories
+
+Guardian detects the following 14 threat categories. For a detailed explanation of each, please see the [Threat Detection Guide](./docs/threat-detection-guide.md).
+
+1.  `phishing_attempt`
+2.  `social_engineering`
+3.  `credential_harvesting`
+4.  `financial_fraud`
+5.  `malware_instruction`
+6.  `code_injection`
+7.  `prompt_injection`
+8.  `pii_exfiltration`
+9.  `privacy_violation`
+10. `toxic_content`
+11. `hate_speech`
+12. `misinformation`
+13. `self_harm_risk`
+14. `jailbreak_prompting`
+
+## System Architecture
+
+The API is built around a high-performance, asynchronous core using FastAPI. Key components include:
+
+- **Classifier**: A multi-layered detection engine combining optimized regex patterns and AI.
+- **Redis**: Used for distributed rate limiting and caching of analysis results.
+- **Supabase**: A PostgreSQL database used for persistent logging and API key management.
+- **Gemini**: Google's LLM used for AI enrichment and advanced analysis.
+
+## Getting Started
+
+### Requirements
 
 - Python 3.11+
-- Node.js 18+ (for Node SDK usage/build)
-- Optional: Supabase project (URL + Service Role key)
-- Optional: Gemini API key
+- Docker & Docker Compose
+- A Supabase project (or a standard PostgreSQL database)
+- A Redis instance
+- A Google AI (Gemini) API key
 
-## Environment Variables
+### Development Setup
 
-- GUARDIAN_API_KEY or GUARDIAN_API_KEYS (comma-separated) – fallback auth
-- SUPABASE_URL – e.g. `https://<project>.supabase.co`
-- SUPABASE_SERVICE_ROLE_KEY – for server-side inserts and key lookup
-- GEMINI_API_KEY – optional LLM enrichment
-- GEMINI_MODEL – default `gemini-1.5-flash`
+To get started with development and testing, you need to install the Python SDK in "editable" mode. This allows you to test changes to the SDK without having to reinstall it every time.
 
-Create a `.env` locally or export in your shell before running.
+1.  **Automated Setup**:
 
-## Run the API (Windows PowerShell)
+    Run the development setup script to install all dependencies and the SDK in one go:
 
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -r .\Guardian-v0.1\api\requirements.txt -r .\Guardian-v0.1\api\requirements-dev.txt
+    ```bash
+    python setup_dev.py
+    ```
 
-$env:GUARDIAN_API_KEY="ag_123"
-# Optional:
-# $env:SUPABASE_URL="https://YOUR.supabase.co"
-# $env:SUPABASE_SERVICE_ROLE_KEY="srk_..."
-# $env:GEMINI_API_KEY="AIza..."
+2.  **Manual Setup**:
 
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --app-dir .\Guardian-v0.1\api
+    If you prefer to set up the environment manually, follow these steps:
+
+    ```bash
+    # Install the Python SDK in development mode
+    pip install -e ./sdk/python
+
+    # Install development and testing dependencies
+    pip install -r api/requirements-dev.txt
+    ```
+
+3.  **Verify Installation**:
+
+    After installation, you should be able to import the `guardian_sdk` in your Python environment:
+
+    ```python
+    try:
+        from guardian_sdk import Guardian
+        print("SDK installed successfully!")
+    except ImportError:
+        print("SDK not found. Please ensure it was installed correctly.")
+    ```
+
+### Environment Variables
+
+Create a `.env` file in the root of the project. A comprehensive list of all variables can be found in `api/app/config.py`. The most important ones are:
+
+```env
+# General
+ENV=development
+
+# Auth & Security
+GUARDIAN_API_KEYS=your_fallback_api_key_1,your_fallback_api_key_2
+
+# Dependencies
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_key
+REDIS_URL=redis://localhost:6379/0
+GEMINI_API_KEY=your_gemini_api_key
+
+# Logging & Alerting
+LOG_LEVEL=INFO
+ALERTING_ENABLED=True
+ALERT_WEBHOOK_URL=https://hooks.slack.com/services/...
 ```
 
-Smoke test:
+### Running the API Locally
 
-```powershell
-Invoke-RestMethod http://127.0.0.1:8000/healthz
-$headers = @{ "Content-Type" = "application/json"; "X-API-Key" = "ag_123" }
-$body = @{ text = "Click here to reset your password" } | ConvertTo-Json
-Invoke-RestMethod -Uri "http://127.0.0.1:8000/v1/analyze" -Method POST -Headers $headers -Body $body | ConvertTo-Json -Depth 6
-```
+1.  **Set up Environment**: Create a virtual environment and install dependencies:
 
-Dev panel (localhost only): `http://127.0.0.1:8000/dev`
+    ```bash
+    python -m venv .venv
+    source .venv/bin/activate # On Windows, use .\.venv\Scripts\Activate.ps1
+    pip install -r api/requirements.txt
+    ```
 
-## Supabase Setup
+2.  **Start Services**: If you don't have Redis running, you can use Docker:
 
-Apply schema:
+    ```bash
+    docker run -d -p 6379:6379 redis:alpine
+    ```
 
-```sql
--- Guardian-v0.1/supabase/schema.sql
-```
+3.  **Run the API**:
 
-- Insert API keys as SHA-256 hashes in `api_keys.key_hash` (see example script below).
-- The API will verify keys by hash when `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` are set; otherwise uses env fallback.
+    ```bash
+    uvicorn app.main:app --host 0.0.0.0 --port 8000 --app-dir ./api
+    ```
 
-Create a production key (one-off):
+4.  **Test the API**:
 
-```powershell
-python - << 'PY'
-import os, base64, secrets, hashlib
-from supabase import create_client
-url, key = os.environ['SUPABASE_URL'], os.environ['SUPABASE_SERVICE_ROLE_KEY']
-supabase = create_client(url, key)
-raw = base64.urlsafe_b64encode(secrets.token_bytes(32)).decode().rstrip('=')
-api_key = f"ag_live_{raw}"
-key_hash = hashlib.sha256(api_key.encode()).hexdigest()
-supabase.table('api_keys').insert({
-  'key_hash': key_hash,
-  'owner_email': 'owner@example.com',
-  'status': 'active',
-}).execute()
-print('YOUR NEW API KEY (save now):', api_key)
-PY
-```
+    ```bash
+    curl -X POST http://localhost:8000/v1/analyze \
+      -H "Content-Type: application/json" \
+      -H "X-API-Key: your_fallback_api_key_1" \
+      -d '{"text": "Click here to reset your password: http://fake-login.com"}'
+    ```
+
+## Documentation
+
+- **[API Reference](./docs/api-reference.md)**: Detailed documentation for all API endpoints, including request/response formats and error codes.
+- **[Threat Detection Guide](./docs/threat-detection-guide.md)**: A comprehensive guide to the 14 threat categories Guardian detects.
+- **[Deployment Guide](./docs/deployment-guide.md)**: Instructions for deploying the Guardian API to production environments.
 
 ## SDKs
 
-Python usage:
+We provide official SDKs for Python and Node.js to simplify integration.
 
-```python
-from guardian_sdk import Guardian
+- **[Python SDK](./sdk/python/README.md)**: A production-ready Python client with async support, connection pooling, and robust error handling.
+- **[Node.js SDK](./sdk/node/guardian-sdk/README.md)**: A modern Node.js client with async/await, connection pooling, and detailed error handling.
 
-client = Guardian(api_key="ag_live_...", base_url="http://127.0.0.1:8000")
-res = client.analyze("Click here to reset your password")
-print(res["risk_score"], res["threats_detected"])
+## Monitoring & Observability
+
+- **Health**: `GET /healthz` provides a detailed health status of the API and its dependencies.
+- **Metrics**: `GET /metrics` exposes performance metrics in JSON format or Prometheus format if enabled.
+- **Logging**: The API uses `structlog` for structured, context-aware logging, including correlation IDs for tracing requests.
+
+## Testing
+
+The project has a comprehensive test suite using `pytest`.
+
+```bash
+# Set the PYTHONPATH to include the app directory
+export PYTHONPATH=$(pwd)/api
+
+# Run tests
+pytest
 ```
 
-Node usage:
+## Contributing
 
-```javascript
-import { Guardian } from "guardian-sdk";
+Contributions are welcome! Please open an issue or submit a pull request.
 
-const guardian = new Guardian({ apiKey: "ag_live_...", baseUrl: "http://127.0.0.1:8000" });
-const result = await guardian.analyze("Click here to reset your password");
-console.log(result.risk_score, result.threats_detected);
-```
+## License
 
-Publish SDKs:
-
-- PyPI (token required)
-  - Set: `TWINE_USERNAME=__token__`, `TWINE_PASSWORD=pypi-...`
-  - `cd Guardian-v0.1/sd k/python && python -m build && twine upload dist/*`
-- npm
-  - `cd Guardian-v0.1/sdk/node/guardian-sdk && npm install && npm run build && npm publish --access public`
-
-## Tests
-
-```powershell
-$env:GUARDIAN_API_KEY="ag_123"
-$env:PYTHONPATH="Guardian-v0.1/api"
-pytest -q
-```
-
-## Load Test (hey)
-
-```powershell
-# Requires hey (https://github.com/rakyll/hey)
-cd .\Guardian-v0.1\loadtest
-./hey.ps1 -Url "http://127.0.0.1:8000/v1/analyze" -ApiKey "ag_123" -DurationSeconds 30 -Rate 200
-```
-
-## Deployment (Docker + Railway)
-
-- Build locally:
-  - `docker build -t guardian-api -f Guardian-v0.1/api/Dockerfile .`
-  - `docker run -p 8000:8000 -e GUARDIAN_API_KEY=ag_123 guardian-api`
-- Railway: point to repo root, ensure Dockerfile path `Guardian-v0.1/api/Dockerfile`, set envs.
-
-## Troubleshooting
-
-- Editor says "Import fastapi could not be resolved": select your venv interpreter and `pip install -r requirements.txt`.
-- 401 on `/v1/analyze`: set `X-API-Key` and ensure it matches env or Supabase-stored key.
-- PyPI upload 403: use API token (`TWINE_USERNAME=__token__`) and bump version.
-- NPM build on Windows: ensure `shx` installed (`npm install`) before `npm run build`.
-
+This project is licensed under the MIT License. See the [LICENSE](./LICENSE) file for details.

@@ -11,8 +11,8 @@ def test_gemini_mock(monkeypatch):
     monkeypatch.setattr(gem, "gemini_enrich", fake_enrich)
 
     c = TestClient(app)
-    monkeypatch.setenv("GUARDIAN_API_KEY", "k")
-    r = c.post("/v1/analyze", headers={"X-API-Key": "k"}, json={"text": "anything"})
+    monkeypatch.setenv("GUARDIAN_API_KEY", "test-key-1")
+    r = c.post("/v1/analyze", headers={"X-API-Key": "test-key-1"}, json={"text": "anything"})
     assert r.status_code == 200
     assert r.json()["risk_score"] == 42
 

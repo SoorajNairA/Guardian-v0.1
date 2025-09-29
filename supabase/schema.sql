@@ -3,6 +3,7 @@
 create table if not exists public.api_keys (
   id uuid primary key default gen_random_uuid(),
   key_hash text not null unique,
+  hash_type text not null default 'argon2', -- 'argon2' or 'legacy'
   owner_email text,
   status text not null default 'active',
   created_at timestamp with time zone default now()
