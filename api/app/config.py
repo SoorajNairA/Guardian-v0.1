@@ -56,7 +56,7 @@ class Settings:
         # Metrics
         self.metrics_enabled = os.getenv("METRICS_ENABLED", "True").lower() in ("true", "1", "t")
         self.metrics_collection_interval_seconds = int(os.getenv("METRICS_COLLECTION_INTERVAL_SECONDS", "60"))
-        self.prometheus_metrics_enabled = os.getenv("PROMETHEUS_METRICS_ENABLED", "False").lower() in ("true", "1", "t")
+        self.prometheus_metrics_enabled = os.getenv("PROMETHEUS_METRICS_ENABLED", "True").lower() in ("true", "1", "t")
         self.prometheus_metrics_port = int(os.getenv("PROMETHEUS_METRICS_PORT", "8001"))
 
         # Alerting

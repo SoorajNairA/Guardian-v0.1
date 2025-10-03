@@ -1,0 +1,17 @@
+[
+  {
+    "id": "TC001",
+    "title": "post v1 analyze text threat detection",
+    "description": "Test the POST /v1/analyze endpoint to verify it correctly analyzes input text for threats, returns risk_score, threats_detected, and metadata including AI generation and language detection, and handles authentication and rate limiting."
+  },
+  {
+    "id": "TC002",
+    "title": "get healthz system health status",
+    "description": "Test the GET /healthz endpoint to ensure it returns the overall system health status, including dependency checks, with appropriate HTTP status codes for healthy (200) and unhealthy (503) states."
+  },
+  {
+    "id": "TC003",
+    "title": "get metrics prometheus formatted output",
+    "description": "Test the GET /metrics endpoint to verify it returns Prometheus-formatted application metrics correctly when metrics collection is enabled."
+  }
+]

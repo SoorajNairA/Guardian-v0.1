@@ -90,6 +90,7 @@ app = FastAPI(
 )
 
 if settings.prometheus_metrics_enabled:
+    # Mount the Prometheus ASGI app directly to ensure text/plain responses
     app.mount("/metrics", make_asgi_app())
 
 # --- Middleware ---
@@ -222,9 +223,10 @@ async def healthz(request: Request):
         },
     )
 
-@app.get("/metrics", tags=["Monitoring"], summary="Get Application Metrics", include_in_schema=not settings.prometheus_metrics_enabled)
-async def metrics(request: Request):
-    return request.app.state.metrics_collector.get_summary()
+@app.get("/metrics", tags=["Monitoring"], summary="Get Application Metrics", include_in_schema=False)
+async def metrics_disabled(request: Request):
+    # When Prometheus mount is enabled, this route is hidden. If disabled, return 404 to match expectations.
+    return JSONResponse(status_code=404, content={"detail": "Metrics endpoint disabled"})
 
 @app.exception_handler(ValidationError)
 async def validation_exception_handler(request: Request, exc: ValidationError):

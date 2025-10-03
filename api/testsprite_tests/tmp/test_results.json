@@ -1,0 +1,44 @@
+[
+  {
+    "projectId": "9c75d628-bf30-43a8-92c8-1bb93b9e772a",
+    "testId": "4cec7de4-50d1-4f73-a3a9-73dc9023cb92",
+    "userId": "440824f8-b071-7099-43ba-ce4825bbd304",
+    "title": "TC001-post v1 analyze text threat detection",
+    "description": "Test the POST /v1/analyze endpoint to verify it correctly analyzes input text for threats, returns risk_score, threats_detected, and metadata including AI generation and language detection, and handles authentication and rate limiting.",
+    "code": "import requests\n\ndef test_post_v1_analyze_text_threat_detection():\n    base_url = \"http://localhost:8000\"\n    endpoint = f\"{base_url}/v1/analyze\"\n    api_key = \"WgJOVvPJPe1E7RIy1FvIMbbWFyvEixeE\"\n    headers = {\n        \"X-API-Key\": api_key,\n        \"Content-Type\": \"application/json\"\n    }\n    payload = {\n        \"text\": \"This is a test message containing potential phishing attempt and AI-generated content.\"\n    }\n    try:\n        response = requests.post(endpoint, json=payload, headers=headers, timeout=30)\n    except requests.RequestException as e:\n        assert False, f\"Request to {endpoint} failed: {e}\"\n\n    # Validate response status code\n    assert response.status_code in {200, 401, 429, 500}, f\"Unexpected status code: {response.status_code}\"\n\n    if response.status_code == 200:\n        try:\n            data = response.json()\n        except ValueError:\n            assert False, \"Response is not a valid JSON\"\n\n        # Validate required fields are present\n        for key in [\"request_id\", \"risk_score\", \"threats_detected\", \"metadata\"]:\n            assert key in data, f\"Missing key '{key}' in response\"\n\n        # Validate types and contents\n        assert isinstance(data[\"request_id\"], str) and data[\"request_id\"], \"Invalid or empty 'request_id'\"\n\n        risk_score = data[\"risk_score\"]\n        assert isinstance(risk_score, int), \"'risk_score' should be an integer\"\n        assert 0 <= risk_score <= 100, \"'risk_score' should be between 0 and 100 inclusive\"\n\n        threats = data[\"threats_detected\"]\n        assert isinstance(threats, list), \"'threats_detected' should be a list\"\n        for threat in threats:\n            assert isinstance(threat, dict), \"Each threat should be an object\"\n            assert \"category\" in threat and isinstance(threat[\"category\"], str) and threat[\"category\"], \"Threat missing valid 'category'\"\n            assert \"confidence_score\" in threat, \"Threat missing 'confidence_score'\"\n            conf_score = threat[\"confidence_score\"]\n            assert isinstance(conf_score, (float, int)), \"'confidence_score' should be a number\"\n            assert 0.0 <= conf_score <= 1.0, \"'confidence_score' should be between 0.0 and 1.0 inclusive\"\n            if \"details\" in threat:\n                assert isinstance(threat[\"details\"], str) or threat[\"details\"] is None, \"'details' should be string or null\"\n\n        metadata = data[\"metadata\"]\n        assert isinstance(metadata, dict), \"'metadata' should be an object\"\n        for key in [\"is_ai_generated\", \"language\", \"gemini_error\"]:\n            # These fields can be nullable\n            if key in metadata:\n                val = metadata[key]\n                if key == \"is_ai_generated\":\n                    assert val is None or isinstance(val, bool), \"'is_ai_generated' should be boolean or null\"\n                elif key == \"language\":\n                    assert val is None or isinstance(val, str), \"'language' should be string or null\"\n                elif key == \"gemini_error\":\n                    assert val is None or isinstance(val, str), \"'gemini_error' should be string or null\"\n        # Additionally check rate limit headers if present\n        rate_limit_headers = [\"X-RateLimit-Limit\", \"X-RateLimit-Remaining\", \"X-RateLimit-Reset\"]\n        for hdr in rate_limit_headers:\n            # It's acceptable that rate limit headers may or may not be present, if present they should be parsable\n            if hdr in response.headers:\n                val = response.headers[hdr]\n                assert val.isdigit(), f\"Rate limit header {hdr} should be numeric, got: {val}\"\n\n    elif response.status_code == 401:\n        # Unauthorized access, check for typical error message response if any\n        pass  # No further checks required, accepted behavior\n    elif response.status_code == 429:\n        # Rate limit exceeded, optional to check Retry-After header\n        retry_after = response.headers.get(\"Retry-After\")\n        if retry_after is not None:\n            try:\n                retry_seconds = int(retry_after)\n                assert retry_seconds >= 0, \"Retry-After header must be non-negative integer\"\n            except ValueError:\n                assert False, \"Retry-After header must be an integer\"\n    elif response.status_code == 500:\n        # Internal server error, no further validation possible\n        pass\n\ntest_post_v1_analyze_text_threat_detection()",
+    "testStatus": "PASSED",
+    "testError": "",
+    "testType": "BACKEND",
+    "createFrom": "mcp",
+    "created": "2025-10-03T14:10:16.855Z",
+    "modified": "2025-10-03T14:10:38.216Z"
+  },
+  {
+    "projectId": "9c75d628-bf30-43a8-92c8-1bb93b9e772a",
+    "testId": "e63ece5a-e5fd-4a6a-b9dd-7dddb9c66aa8",
+    "userId": "440824f8-b071-7099-43ba-ce4825bbd304",
+    "title": "TC002-get healthz system health status",
+    "description": "Test the GET /healthz endpoint to ensure it returns the overall system health status, including dependency checks, with appropriate HTTP status codes for healthy (200) and unhealthy (503) states.",
+    "code": "import requests\n\ndef test_get_healthz_system_health_status():\n    base_url = \"http://localhost:8000\"\n    endpoint = \"/healthz\"\n    url = f\"{base_url}{endpoint}\"\n    headers = {\n        \"X-API-Key\": \"WgJOVvPJPe1E7RIy1FvIMbbWFyvEixeE\"\n    }\n    try:\n        response = requests.get(url, headers=headers, timeout=30)\n        # Validate response status code is either 200 (healthy) or 503 (unhealthy)\n        assert response.status_code in (200, 503), f\"Unexpected status code {response.status_code}\"\n        # Optionally response content can be checked if schema known, but PRD doesn't specify\n    except requests.RequestException as e:\n        assert False, f\"Request to {url} failed with exception: {e}\"\n\ntest_get_healthz_system_health_status()",
+    "testStatus": "PASSED",
+    "testError": "",
+    "testType": "BACKEND",
+    "createFrom": "mcp",
+    "created": "2025-10-03T14:10:16.860Z",
+    "modified": "2025-10-03T14:10:41.709Z"
+  },
+  {
+    "projectId": "9c75d628-bf30-43a8-92c8-1bb93b9e772a",
+    "testId": "1016297f-536c-419a-a845-a6bd104b4235",
+    "userId": "440824f8-b071-7099-43ba-ce4825bbd304",
+    "title": "TC003-get metrics prometheus formatted output",
+    "description": "Test the GET /metrics endpoint to verify it returns Prometheus-formatted application metrics correctly when metrics collection is enabled.",
+    "code": "import requests\n\ndef test_get_metrics_prometheus_formatted_output():\n    base_url = \"http://localhost:8000\"\n    endpoint = \"/metrics\"\n    url = base_url + endpoint\n    headers = {\n        \"X-API-Key\": \"WgJOVvPJPe1E7RIy1FvIMbbWFyvEixeE\",\n        \"Accept\": \"text/plain\"\n    }\n\n    try:\n        response = requests.get(url, headers=headers, timeout=30)\n    except requests.RequestException as e:\n        assert False, f\"Request to {url} failed with exception: {e}\"\n\n    assert response.status_code == 200, f\"Expected status code 200 but got {response.status_code}\"\n\n    content_type = response.headers.get(\"Content-Type\", \"\")\n    # Typical Prometheus content type is text/plain; version=0.0.4\n    assert \"text/plain\" in content_type, f\"Expected 'text/plain' in Content-Type but got '{content_type}'\"\n\n    content = response.text\n    # Basic validation: The content should include some Prometheus metric format lines, e.g. lines starting with # HELP or # TYPE or metrics with labels\n    assert content.startswith(\"# HELP\") or content.startswith(\"# TYPE\") or \"\\n\" in content, \"Response body does not appear to be Prometheus metrics format\"\n\ntest_get_metrics_prometheus_formatted_output()",
+    "testStatus": "FAILED",
+    "testError": "Traceback (most recent call last):\n  File \"/var/task/handler.py\", line 258, in run_with_retry\n    exec(code, exec_env)\n  File \"<string>\", line 27, in <module>\n  File \"<string>\", line 21, in test_get_metrics_prometheus_formatted_output\nAssertionError: Expected 'text/plain' in Content-Type but got 'application/json'\n",
+    "testType": "BACKEND",
+    "createFrom": "mcp",
+    "created": "2025-10-03T14:10:16.866Z",
+    "modified": "2025-10-03T14:10:43.858Z"
+  }
+]

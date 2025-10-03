@@ -16,3 +16,4 @@ asyncio-mqtt==0.16.1
 psutil==5.9.6
 aiofiles==23.2.1
 tenacity
+google-generativeai==0.7.2

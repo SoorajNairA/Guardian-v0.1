@@ -5,6 +5,11 @@ import time
 from typing import Any, Callable, Coroutine, Dict, List, Optional
 
 import httpx
+try:
+    import google.generativeai as genai  # type: ignore
+    _GENAI_AVAILABLE = True
+except Exception:
+    _GENAI_AVAILABLE = False
 from pydantic import ValidationError
 
 from .config import settings
@@ -188,24 +193,51 @@ async def gemini_enrich(
         "contents": [{"parts": [{"text": prompt}, {"text": f"TEXT:\n{text}"}]}]
     }
     model = settings.gemini_model
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={settings.gemini_api_key}"
-    timeouts = httpx.Timeout(5.0, read=15.0)  # 5s connect, 15s read
-
     try:
-        async with httpx.AsyncClient(timeout=timeouts) as client:
-            logger.info(f"Sending request to Gemini API model {model} for text '{text[:50]}...'.")
-            resp = await client.post(url, json=payload)
-            logger.debug(f"Request payload: {payload}")
-            
-            if resp.status_code >= 300:
-                logger.error(f"Gemini API request failed with status {resp.status_code}: {resp.text}")
-            resp.raise_for_status()
+        # Prefer official SDK if available (works with Google AI Studio keys)
+        if _GENAI_AVAILABLE:
+            logger.info(f"Sending request to Gemini via SDK model {model} for text '{text[:50]}...'.")
+            loop = asyncio.get_running_loop()
 
-            logger.info(f"Received response from Gemini API with status {resp.status_code}.")
-            logger.debug(f"Response body: {resp.text}")
-            
-            data = resp.json()
-            analysis = _parse_gemini_response(data)
+            def _run_genai() -> Dict[str, Any]:
+                genai.configure(api_key=settings.gemini_api_key)
+                gm = genai.GenerativeModel(model)
+                resp = gm.generate_content([prompt, f"TEXT:\n{text}"])
+                # The SDK returns a structured object; extract the first part's text
+                result_text = getattr(resp, 'text', None)
+                if not result_text and getattr(resp, 'candidates', None):
+                    # Fallback: reconstruct from candidates
+                    try:
+                        result_text = resp.candidates[0].content.parts[0].text
+                    except Exception:
+                        result_text = None
+                if not result_text:
+                    raise GeminiParsingError("Empty response from Gemini SDK")
+                # Parse minified JSON from the model output
+                parsed = json.loads(result_text)
+                # Return in unified format
+                return {
+                    "analysis": parsed
+                }
+
+            sdk_result = await loop.run_in_executor(None, _run_genai)
+            sdk_analysis = GeminiAnalysis.model_validate(sdk_result["analysis"])
+            analysis = sdk_analysis
+        else:
+            # Fallback to REST v1 endpoint (some keys require v1, not v1beta)
+            url = f"https://generativelanguage.googleapis.com/v1/models/{model}:generateContent?key={settings.gemini_api_key}"
+            timeouts = httpx.Timeout(5.0, read=15.0)
+            async with httpx.AsyncClient(timeout=timeouts) as client:
+                logger.info(f"Sending request to Gemini REST model {model} for text '{text[:50]}...'.")
+                resp = await client.post(url, json=payload)
+                logger.debug(f"Request payload: {payload}")
+                if resp.status_code >= 300:
+                    logger.error(f"Gemini API request failed with status {resp.status_code}: {resp.text}")
+                resp.raise_for_status()
+                logger.info(f"Received response from Gemini API with status {resp.status_code}.")
+                logger.debug(f"Response body: {resp.text}")
+                data = resp.json()
+                analysis = _parse_gemini_response(data)
 
         # Adjust risk and threats based on analysis
         adjusted_threats = list(threats)
