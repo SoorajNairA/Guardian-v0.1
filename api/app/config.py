@@ -1,5 +1,9 @@
 import os
 from typing import List
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 
 class Settings:
@@ -12,7 +16,10 @@ class Settings:
 
         # Gemini
         self.gemini_api_key = os.getenv("GEMINI_API_KEY", "")
-        self.gemini_model = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
+        # Use '-latest' by default to avoid 404s on model lookups
+        self.gemini_model = os.getenv("GEMINI_MODEL", "gemini-1.5-flash-latest")
+        self.gemini_enrichment_enabled = os.getenv("GEMINI_ENRICHMENT_ENABLED", "True").lower() in ("true", "1", "t")
+        self.gemini_include_error_in_response = os.getenv("GEMINI_INCLUDE_ERROR_IN_RESPONSE", "False").lower() in ("true", "1", "t")
 
         # Supabase
         self.supabase_url = os.getenv("SUPABASE_URL", "")

@@ -1,0 +1,119 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Guardian Developer Panel Design System - Dark-first professional UI */
+
+@layer base {
+  :root {
+    /* Developer Panel Color System */
+    --dev-navy: 220 26% 14%;
+    --dev-navy-light: 220 20% 18%;
+    --dev-slate: 215 25% 27%;
+    --dev-slate-light: 215 20% 35%;
+    
+    /* Status Colors */
+    --status-success: 142 76% 36%;
+    --status-warning: 38 92% 50%;
+    --status-error: 0 84% 60%;
+    --status-info: 199 89% 48%;
+    
+    /* Accent & Interactive */
+    --dev-blue: 217 91% 60%;
+    --dev-blue-light: 217 91% 70%;
+    --dev-cyan: 187 85% 53%;
+    
+    /* Base System */
+    --background: var(--dev-navy);
+    --foreground: 210 20% 98%;
+    
+    --card: var(--dev-navy-light);
+    --card-foreground: 210 15% 92%;
+    
+    --popover: var(--dev-navy-light);
+    --popover-foreground: 210 15% 92%;
+    
+    --primary: var(--dev-blue);
+    --primary-foreground: 220 26% 14%;
+    
+    --secondary: var(--dev-slate);
+    --secondary-foreground: 210 15% 92%;
+    
+    --muted: var(--dev-slate);
+    --muted-foreground: 215 15% 65%;
+    
+    --accent: var(--dev-blue);
+    --accent-foreground: 220 26% 14%;
+    
+    --destructive: var(--status-error);
+    --destructive-foreground: 210 20% 98%;
+    
+    --success: var(--status-success);
+    --success-foreground: 210 20% 98%;
+    
+    --warning: var(--status-warning);
+    --warning-foreground: 220 26% 14%;
+    
+    --info: var(--status-info);
+    --info-foreground: 210 20% 98%;
+    
+    --border: 215 15% 25%;
+    --input: 215 15% 25%;
+    --ring: var(--dev-blue);
+    
+    --radius: 0.75rem;
+    
+    /* Code & Monospace */
+    --code-bg: 220 30% 8%;
+    --code-border: 215 15% 20%;
+    
+    /* Gradients */
+    --gradient-primary: linear-gradient(135deg, hsl(var(--dev-blue)), hsl(var(--dev-cyan)));
+    --gradient-status: linear-gradient(135deg, hsl(var(--status-success)), hsl(var(--status-info)));
+    --gradient-card: linear-gradient(135deg, hsl(var(--dev-navy-light)), hsl(var(--dev-slate)));
+    
+    /* Shadows */
+    --shadow-dev: 0 4px 20px -2px hsl(220 30% 5% / 0.3);
+    --shadow-card: 0 2px 12px -2px hsl(220 30% 5% / 0.2);
+    --shadow-intense: 0 8px 30px -4px hsl(220 30% 5% / 0.4);
+    
+    /* Transitions */
+    --transition-smooth: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-bounce: all 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  
+  body {
+    @apply bg-background text-foreground font-sans;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  }
+  
+  /* Code Typography */
+  .font-mono {
+    font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+  }
+  
+  /* Custom Scrollbars */
+  ::-webkit-scrollbar {
+    @apply w-2 h-2;
+  }
+  
+  ::-webkit-scrollbar-track {
+    @apply bg-muted/20;
+  }
+  
+  ::-webkit-scrollbar-thumb {
+    @apply bg-muted/60 rounded-full;
+  }
+  
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-muted/80;
+  }
+}

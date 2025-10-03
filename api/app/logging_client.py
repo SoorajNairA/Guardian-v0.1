@@ -114,19 +114,23 @@ class AsyncLoggingClient:
             raise
 
     def _format_payload(self, entry: LogEntry) -> Dict[str, Any]:
-        """Formats a LogEntry into the dictionary payload for Supabase."""
+        """Formats a LogEntry into the dictionary payload compatible with current Supabase schema."""
+        # Embed additional fields into request_meta to avoid schema mismatches
+        meta: Dict[str, Any] = dict(entry.request_meta or {})
+        meta["correlation_id"] = entry.correlation_id
+        meta["trace_id"] = entry.trace_id
+        meta["level"] = entry.level
+        meta["message"] = entry.message
+        meta["timestamp_iso"] = entry.timestamp.isoformat()
+
         return {
             "request_id": entry.request_id,
-            "correlation_id": entry.correlation_id,
-            "trace_id": entry.trace_id,
             "api_key_id": entry.api_key_id,
             "risk_score": entry.risk_score,
             "text_length": entry.text_length,
             "threats": entry.threats,
-            "request_meta": entry.request_meta,
-            "level": entry.level,
-            "message": entry.message,
-            "timestamp": entry.timestamp.isoformat(),
+            "request_meta": meta,
+            # created_at is handled by DB default
         }
 
     async def log_event(self, entry: LogEntry):

@@ -13,10 +13,12 @@ from fastapi.testclient import TestClient
 from redis.asyncio import Redis as AsyncRedis
 import redis
 
+# Import config module
+import sys
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'api'))
 from app import config
 from app.main import app
-from app.rate_limiter import get_redis_client
-from app.crypto_utils import legacy_hash_api_key
 
 # Fixture to verify SDK installation
 @pytest.fixture(scope="session")

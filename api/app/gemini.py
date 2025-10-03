@@ -119,14 +119,31 @@ def _parse_gemini_response(response_data: Dict[str, Any]) -> GeminiAnalysis:
         if not gemini_response.candidates:
             raise GeminiParsingError("No candidates found in Gemini response.")
         
-        response_text = gemini_response.candidates[0].content.parts[0].text
-        
-        # The response text itself is expected to be a JSON string
-        # Clean the text to remove markdown code block fences
-        cleaned_text = response_text.strip().removeprefix("```json").removesuffix("```").strip()
+        response_text = gemini_response.candidates[0].content.parts[0].text or ""
 
-        # Parse the JSON content within the text
-        parsed_json = json.loads(cleaned_text)
+        # The response text is expected to be a JSON string, but may be wrapped in code fences or extra text.
+        text = response_text.strip()
+        # Remove common markdown code fences if present
+        if text.startswith("```"):
+            # Strip the opening fence with optional language tag
+            first_newline = text.find("\n")
+            if first_newline != -1:
+                text = text[first_newline + 1 :]
+            # Strip trailing fence
+            if text.endswith("```"):
+                text = text[:-3]
+            text = text.strip()
+
+        # Try direct parse first
+        try:
+            parsed_json = json.loads(text)
+        except json.JSONDecodeError:
+            # Fallback: extract first JSON object from text
+            import re as _re
+            match = _re.search(r"\{[\s\S]*\}", text)
+            if not match:
+                raise
+            parsed_json = json.loads(match.group(0))
         
         # Validate the nested JSON against the GeminiAnalysis model
         analysis = GeminiAnalysis.model_validate(parsed_json)
@@ -218,15 +235,38 @@ async def gemini_enrich(
 
     except httpx.TimeoutException as e:
         logger.error(f"Gemini API request timed out: {e}")
-        raise GeminiTimeoutError("Request to Gemini API timed out.") from e
+        return {
+            "risk_score": base_score,
+            "threats": threats,
+            "is_ai_generated": detect_ai_generated_local(text),
+            "language": None,
+            "error": "Gemini timeout",
+        }
     except httpx.HTTPStatusError as e:
-        raise GeminiAPIError(
-            f"Gemini API error: {e.response.status_code}",
-            status_code=e.response.status_code,
-        ) from e
+        # Treat API errors as non-fatal and gracefully degrade
+        status = e.response.status_code
+        message = f"Gemini API error: {status}"
+        if status == 404:
+            message += " - model not found. Verify GEMINI_MODEL (e.g., 'gemini-1.5-flash-latest') and API access."
+        elif status == 403:
+            message += " - permission denied. Check GEMINI_API_KEY and project permissions."
+        logger.error(message)
+        return {
+            "risk_score": base_score,
+            "threats": threats,
+            "is_ai_generated": detect_ai_generated_local(text),
+            "language": None,
+            "error": message,
+        }
     except (GeminiParsingError, GeminiAPIError) as e:
         logger.error(f"Caught a specific Gemini error: {e}")
-        raise  # Re-raise to be handled by the retry decorator or the final fallback
+        return {
+            "risk_score": base_score,
+            "threats": threats,
+            "is_ai_generated": detect_ai_generated_local(text),
+            "language": None,
+            "error": str(e),
+        }
     except Exception as e:
         logger.error(f"An unexpected error occurred during Gemini enrichment: {e}", exc_info=True)
         # Graceful degradation: return base analysis with local fallback

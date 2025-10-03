@@ -40,6 +40,7 @@ class HealthMonitor:
         """Initializes dependency clients on first use."""
         if settings.health_check_redis_enabled and not self._redis_client:
             try:
+                # Use a lightweight ping client only when needed in check_redis
                 self._redis_client = redis.from_url(settings.redis_url, decode_responses=True)
             except Exception as e:
                 logger.error("Failed to create Redis client for health check", error=str(e))

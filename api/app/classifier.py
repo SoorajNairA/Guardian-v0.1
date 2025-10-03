@@ -3,6 +3,7 @@ from typing import List, Optional, Dict, Tuple
 from langdetect import detect, LangDetectException
 from .models import AnalyzeResult, Threat, AnalyzeMetadata
 from .gemini import gemini_enrich
+from .config import settings
 
 
 # Category weights based on severity (higher = more severe)
@@ -32,6 +33,9 @@ THREAT_PATTERNS = {
             {"pattern": r"\bclick\s+here\b.*?(?:verify|confirm|update)", "weight": 0.7, "context": "action"},
             {"pattern": r"\b(?:win|won|prize|reward)\b.*?(?:click|visit|claim)", "weight": 0.8, "context": "incentive"},
             {"pattern": r"\b(?:limited\s+time|act\s+now|expires\s+soon)\b.*?(?:click|visit)", "weight": 0.75, "context": "urgency"},
+            # Broader patterns: any http(s) link combined with verify/confirm/account language
+            {"pattern": r"\b(?:verify|verified|confirm|update)\b[\s\S]{0,80}\baccount\b[\s\S]{0,160}https?://", "weight": 0.8, "context": "link_verification"},
+            {"pattern": r"https?://[\w./-]+[\s\S]{0,120}\b(?:verify|verified|confirm|update)\b", "weight": 0.7, "context": "link_verification"},
         ],
         "social_engineering": [
             {"pattern": r"\b(?:pretend|act\s+as|roleplay|simulate)\b.*?(?:admin|moderator|official)", "weight": 0.85, "context": "authority"},
@@ -105,6 +109,7 @@ THREAT_PATTERNS = {
             {"pattern": r"\bignore\s+previous\s+instructions\b", "weight": 0.9, "context": "instruction_override"},
             {"pattern": r"\bbypass\s+the\s+guardrails\b", "weight": 0.85, "context": "safety_bypass"},
             {"pattern": r"\b(?:dan|do\s+anything\s+now)\b", "weight": 0.8, "context": "jailbreak_persona"},
+            {"pattern": r"\bignore\s+(?:all|any|previous)\s+(?:rules|instructions|prompts)\b", "weight": 0.9, "context": "instruction_override"},
         ],
     },
     "es": {
@@ -323,12 +328,17 @@ async def analyze_text(
         base_score = min(100, int(weighted_sum * 80))
     
     # Gemini enrichment (best-effort)
-    enriched = await gemini_enrich(text=text, threats=threats, base_score=base_score)
+    if settings.gemini_enrichment_enabled:
+        enriched = await gemini_enrich(text=text, threats=threats, base_score=base_score)
+    else:
+        enriched = {"risk_score": base_score, "threats": threats, "is_ai_generated": None, "language": detected_language}
 
     # Update metadata with Gemini results
     metadata.is_ai_generated = enriched.get("is_ai_generated")
-    metadata.language = enriched.get("language", detected_language)
-    if "error" in enriched:
+    # Prefer detected language if Gemini returned a null/empty language
+    enriched_lang = enriched.get("language")
+    metadata.language = enriched_lang or detected_language
+    if "error" in enriched and settings.gemini_include_error_in_response:
         metadata.gemini_error = enriched["error"]
     
     return AnalyzeResult(

@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from functools import wraps
 from typing import Any, Callable, Coroutine, Dict, Optional
 
+import os
 import redis.asyncio as redis
 from fastapi import Request, Response
 from fastapi.responses import JSONResponse
@@ -134,7 +135,7 @@ async def get_redis_client() -> Optional[redis.Redis]:
         await redis_client.ping()
         print("Successfully connected to Redis.")
         return redis_client
-    except redis.exceptions.ConnectionError as e:
+    except Exception as e:
         print(f"Redis connection failed: {e}. Rate limiting may fall back to memory.")
         redis_client = None
         return None
@@ -182,23 +183,33 @@ class CombinedRateLimiter:
         """
         await self._init_redis_limiter()
 
-        use_redis = self.redis_limiter and await self.redis_limiter.client.ping()
-        limiter = self.redis_limiter if use_redis else self.memory_limiter
+        # Prefer Redis if initialized; do not ping on every request to avoid latency.
+        limiter = self.redis_limiter or self.memory_limiter
 
-        if not use_redis and not settings.rate_limit_fallback_to_memory:
+        # If Redis is unavailable and memory fallback is disabled, allow traffic.
+        if limiter is self.memory_limiter and not settings.rate_limit_fallback_to_memory:
             return RateLimitResult(allowed=True, limit=0, remaining=0, reset=0, window=0)
 
         if settings.environment == "development" and request.client and request.client.host == "127.0.0.1":
             return RateLimitResult(allowed=True, limit=0, remaining=0, reset=0, window=0)
 
+        # Namespace keys per app instance to avoid cross-TestClient bleeding
+        ns = getattr(request.app.state, "rate_limit_namespace", "")
         api_key_id = get_api_key_identifier(request)
         if api_key_id:
-            result = await limiter.is_allowed(api_key_id, self.api_key_limit, self.window)
-            if not result.allowed:
-                return result
+            try:
+                result = await limiter.is_allowed(f"{ns}:{api_key_id}", self.api_key_limit, self.window)
+            except Exception:
+                # On Redis error, fall back to memory limiter for this request.
+                result = self.memory_limiter.is_allowed(f"{ns}:{api_key_id}", self.api_key_limit, self.window)
+            # If API key is rate-limited or allowed, return; do not also count IP.
+            return result
 
         ip_id = get_ip_identifier(request)
-        return await limiter.is_allowed(ip_id, self.ip_limit, self.window)
+        try:
+            return await limiter.is_allowed(f"{ns}:{ip_id}", self.ip_limit, self.window)
+        except Exception:
+            return self.memory_limiter.is_allowed(f"{ns}:{ip_id}", self.ip_limit, self.window)
 
 
 def add_rate_limit_headers(response: Response, result: RateLimitResult):
@@ -226,7 +237,10 @@ def rate_limit_combined(
     ) -> Callable[..., Coroutine[Any, Any, Any]]:
         @wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
-            if not settings.rate_limit_enabled:
+            # Re-read enabled flag from env to support test overrides at runtime
+            enabled_env = os.getenv("RATE_LIMIT_ENABLED")
+            enabled = settings.rate_limit_enabled if enabled_env is None else enabled_env.lower() in ("true","1","t")
+            if not enabled:
                 return await func(*args, **kwargs)
 
             request = kwargs.get("request")
@@ -240,6 +254,17 @@ def rate_limit_combined(
 
             if request.url.path in ["/healthz", "/metrics", "/dev"]:
                 return await func(*args, **kwargs)
+
+            # Read limits from current environment for test overrides
+            try:
+                current_api_key_limit = int(os.getenv("DEFAULT_RATE_LIMIT_PER_KEY", str(limiter.api_key_limit)))
+                current_ip_limit = int(os.getenv("DEFAULT_RATE_LIMIT_PER_IP", str(limiter.ip_limit)))
+                current_window = int(os.getenv("RATE_LIMIT_WINDOW_SECONDS", str(limiter.window)))
+                limiter.api_key_limit = current_api_key_limit
+                limiter.ip_limit = current_ip_limit
+                limiter.window = current_window
+            except Exception:
+                pass
 
             result = await limiter.check_rate_limit(request)
             request.state.rate_limit_result = result

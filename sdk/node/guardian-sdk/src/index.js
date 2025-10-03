@@ -84,7 +84,10 @@ export class Guardian {
             throw new GuardianValidationError("Input `text` must be a non-empty string.");
         }
 
-        const payload = { text, ...options };
+        const payload = { text };
+        if (options && typeof options === "object" && options.config) {
+            payload.config = options.config;
+        }
         const url = `${this.config.baseUrl}/v1/analyze`;
         const headers = {
             "X-API-Key": this.config.apiKey,

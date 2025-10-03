@@ -1,4 +1,4 @@
-from ..guardian_sdk import (
+from guardian_sdk import (
     Guardian,
     GuardianConfig,
     GuardianError,
@@ -17,4 +17,5 @@ __all__ = [
     "GuardianRateLimitError",
     "GuardianValidationError",
 ]
+
 

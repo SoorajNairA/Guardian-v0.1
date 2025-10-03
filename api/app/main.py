@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse, Response
 from fastapi.security import APIKeyHeader
 from prometheus_client import make_asgi_app
 from pydantic import ValidationError
+from fastapi.exceptions import RequestValidationError
 
 from .alerting_system import alerting_system
 from .classifier import analyze_text
@@ -17,7 +18,7 @@ from .health_monitor import HealthMonitor
 from .logging_client import LogEntry, logging_client
 from .metrics_collector import metrics_collector
 from .models import AnalyzeRequest, AnalyzeResponse, Threat
-from .rate_limiter import add_rate_limit_headers, rate_limit_combined
+from .rate_limiter import add_rate_limit_headers, rate_limit_combined, memory_store
 from .stats import stats
 from .structured_logging import (
     configure_logging,
@@ -57,6 +58,13 @@ async def lifespan(app: FastAPI):
     app.state.health_monitor = health_monitor
     app.state.metrics_collector = metrics_collector
     app.state.alerting_system = alerting_system
+    # Provide a per-app instance namespace for in-memory rate limiter isolation in tests
+    app.state.rate_limit_namespace = str(time.time())
+    # Reset in-memory rate limiter store per app lifecycle (test isolation)
+    try:
+        memory_store.clear()
+    except Exception:
+        pass
     logger.info("Background services started.")
     yield
     logger.info("Guardian API shutting down...")
@@ -112,7 +120,19 @@ async def correlation_and_logging_middleware(request: Request, call_next) -> Res
     response.headers["X-Correlation-ID"] = correlation_id
     log_response(logger, response, latency_ms)
     if 200 <= response.status_code < 300:
-        stats.add(request_id=correlation_id, risk_score=0, threats=[], latency_ms=latency_ms)
+        try:
+            analyzed = getattr(request.state, "analysis_result", None)
+            if analyzed:
+                stats.add(
+                    request_id=correlation_id,
+                    risk_score=analyzed.get("risk_score", 0),
+                    threats=analyzed.get("threats", []),
+                    latency_ms=latency_ms,
+                )
+            else:
+                stats.add(request_id=correlation_id, risk_score=0, threats=[], latency_ms=latency_ms)
+        except Exception:
+            stats.add(request_id=correlation_id, risk_score=0, threats=[], latency_ms=latency_ms)
     else:
         stats.record_error(response.status_code, latency_ms)
 
@@ -149,7 +169,7 @@ async def analyze(
     """
     start_time = time.monotonic()
     result = await analyze_text(
-        text=req.sanitized_text, # Use sanitized text
+        text=req.text,
         model_version=req.config.model_version if req.config else None,
         compliance_mode=req.config.compliance_mode if req.config else None,
     )
@@ -163,6 +183,15 @@ async def analyze(
     )
 
     log_analysis(logger, risk_score=response.risk_score, threats_count=len(response.threats_detected), api_key_id=api_key)
+
+    # Expose analysis summary to middleware for accurate metrics
+    try:
+        request.state.analysis_result = {
+            "risk_score": response.risk_score,
+            "threats": [t.model_dump() for t in response.threats_detected],
+        }
+    except Exception:
+        pass
 
     await logging_client.log_event(LogEntry(
         request_id=correlation_id_var.get(),
@@ -199,6 +228,14 @@ async def metrics(request: Request):
 
 @app.exception_handler(ValidationError)
 async def validation_exception_handler(request: Request, exc: ValidationError):
+    log_error(logger, exc, validation_errors=exc.errors())
+    return JSONResponse(
+        status_code=422,
+        content={"detail": "Input validation failed", "errors": exc.errors()},
+    )
+
+@app.exception_handler(RequestValidationError)
+async def request_validation_exception_handler(request: Request, exc: RequestValidationError):
     log_error(logger, exc, validation_errors=exc.errors())
     return JSONResponse(
         status_code=422,

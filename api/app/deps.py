@@ -1,3 +1,4 @@
+import os
 import asyncio
 import logging
 from fastapi import Header, HTTPException
@@ -87,14 +88,16 @@ async def verify_api_key(x_api_key: str | None = Header(default=None)) -> str:
                         break # Exit retry loop
         except Exception as e:
             logger.error(f"Supabase lookup failed unexpectedly: {e}")
-    # 2) Env-based allowlist fallback
-    allowed_keys = {k.strip() for k in settings.guardian_api_keys if k.strip()}
-    if settings.guardian_api_keys:
+    # 2) Env-based allowlist fallback (read current env at call time for test compatibility)
+    env_keys = os.getenv("GUARDIAN_API_KEYS", "")
+    allowed_keys = {k.strip() for k in env_keys.split(",") if k.strip()}
+    if allowed_keys:
         for allowed_key in allowed_keys:
             if secure_compare_keys(x_api_key, allowed_key):
                 return "env_allowlist"
 
-    if settings.guardian_api_key and secure_compare_keys(x_api_key, settings.guardian_api_key):
+    env_default_key = os.getenv("GUARDIAN_API_KEY", settings.guardian_api_key)
+    if env_default_key and secure_compare_keys(x_api_key, env_default_key):
         return "env_default"
 
     raise HTTPException(status_code=401, detail="Invalid API key")
