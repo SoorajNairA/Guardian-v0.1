@@ -1,17 +1,24 @@
 import os
 from typing import List
+import logging
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
 load_dotenv()
 
+logger = logging.getLogger(__name__)
+
 
 class Settings:
     def __init__(self) -> None:
-        self.environment = os.getenv("ENV", "development")
+        self.environment = os.getenv("ENV", "development").lower()
+        if self.environment not in ["development", "testing", "staging", "production"]:
+            raise ValueError(f"Invalid environment: {self.environment}")
 
         # Auth
         self.guardian_api_key = os.getenv("GUARDIAN_API_KEY", "")
+        if self.environment == "production" and not self.guardian_api_key:
+            raise ValueError("GUARDIAN_API_KEY is required in production")
         self.guardian_api_keys = self._split_env_list(os.getenv("GUARDIAN_API_KEYS", ""))
 
         # Gemini
@@ -82,8 +89,22 @@ class Settings:
         self.pii_patterns = self._split_env_list(os.getenv("PII_PATTERNS", "email,phone,ip,credit_card,ssn"))
         self.compliance_mode = os.getenv("COMPLIANCE_MODE", "standard")  # standard, gdpr, hipaa, ccpa
         self.audit_logging_enabled = os.getenv("AUDIT_LOGGING_ENABLED", "True").lower() in ("true", "1", "t")
-        self.encryption_key = os.getenv("ENCRYPTION_KEY", "")  # For encrypting sensitive metadata
-        self.metadata_encryption_enabled = os.getenv("METADATA_ENCRYPTION_ENABLED", "True").lower() in ("true", "1", "t")
+        # Encryption settings with validation
+        self.encryption_key = os.getenv("ENCRYPTION_KEY", "")
+        encryption_requested = self._parse_bool("METADATA_ENCRYPTION_ENABLED", False)  # Changed default to False
+        
+        # Validate encryption configuration
+        if encryption_requested and self.encryption_key:
+            if len(self.encryption_key) < 32:
+                logger.warning("ENCRYPTION_KEY is too short (< 32 chars). Disabling metadata encryption.")
+                self.metadata_encryption_enabled = False
+            else:
+                self.metadata_encryption_enabled = True
+        else:
+            # Disable encryption if key is missing or encryption not requested
+            self.metadata_encryption_enabled = False
+            if encryption_requested and not self.encryption_key:
+                logger.warning("ENCRYPTION_KEY not provided. Metadata encryption will be disabled.")
 
         # Explainability
         self.xai_enabled = os.getenv("XAI_ENABLED", "True").lower() in ("true", "1", "t")
@@ -92,7 +113,36 @@ class Settings:
 
     @staticmethod
     def _split_env_list(value: str) -> List[str]:
-        return [v for v in value.split(",") if v]
+        return [v.strip() for v in value.split(",") if v.strip()]
+        
+    def _parse_bool(self, env_var: str, default: bool = False) -> bool:
+        """Parse boolean environment variables consistently"""
+        value = os.getenv(env_var, str(default)).lower()
+        if value in ("true", "1", "t", "yes", "y", "on"):
+            return True
+        if value in ("false", "0", "f", "no", "n", "off"):
+            return False
+        raise ValueError(f"Invalid boolean value for {env_var}: {value}")
+    
+    def validate_production_settings(self) -> None:
+        """Validate required settings in production environment"""
+        if self.environment != "production":
+            return
+            
+        required_settings = {
+            "GUARDIAN_API_KEY": self.guardian_api_key,
+            "GEMINI_API_KEY": self.gemini_api_key,
+            "SUPABASE_URL": self.supabase_url,
+            "SUPABASE_SERVICE_ROLE_KEY": self.supabase_service_role_key,
+            "REDIS_URL": self.redis_url,
+            "ENCRYPTION_KEY": self.encryption_key if self.metadata_encryption_enabled else "optional"
+        }
+        
+        missing = [k for k, v in required_settings.items() if v == ""]
+        if missing:
+            raise ValueError(f"Missing required production settings: {', '.join(missing)}")
 
 
 settings = Settings()
+if settings.environment == "production":
+    settings.validate_production_settings()

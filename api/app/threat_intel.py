@@ -7,6 +7,7 @@ from typing import Dict, List, Optional, Set
 from urllib.parse import urlparse
 
 import httpx
+from .logging_client import logger
 from .config import settings
 
 class ThreatIntelligence:
@@ -53,49 +54,96 @@ class ThreatIntelligence:
         """Load threat intelligence from external sources"""
         # Path to cached intel data
         cache_dir = Path(__file__).parent / "data"
-        cache_dir.mkdir(exist_ok=True)
-        cache_file = cache_dir / "threat_intel_cache.json"
-        
         try:
-            if cache_file.exists() and (time.time() - cache_file.stat().st_mtime < 86400):  # 24h cache
-                with open(cache_file) as f:
-                    self.external_intel = json.load(f)
-            else:
+            cache_dir.mkdir(exist_ok=True)
+            cache_file = cache_dir / "threat_intel_cache.json"
+            
+            cache_ttl = getattr(settings, 'threat_intel_cache_ttl', 86400)  # 24h default
+            
+            try:
+                if cache_file.exists() and (time.time() - cache_file.stat().st_mtime < cache_ttl):
+                    with open(cache_file, 'r', encoding='utf-8') as f:
+                        self.external_intel = json.load(f)
+                else:
+                    self.external_intel = self._fetch_external_intel()
+                    with open(cache_file, 'w', encoding='utf-8') as f:
+                        json.dump(self.external_intel, f, indent=2)
+            except (json.JSONDecodeError, IOError) as e:
+                logger.error(f"Error accessing threat intel cache: {str(e)}")
                 self.external_intel = self._fetch_external_intel()
-                with open(cache_file, 'w') as f:
-                    json.dump(self.external_intel, f)
         except Exception as e:
-            print(f"Error loading external intel: {e}")
-            self.external_intel = {}
+            logger.error(f"Error loading external intel: {str(e)}")
+            self.external_intel = {
+                "suspicious_domains": [],
+                "phishing_patterns": [],
+                "scam_indicators": []
+            }
             
     def _fetch_external_intel(self) -> Dict:
-        """Fetch threat intelligence from external sources"""
+        """
+        Fetch threat intelligence from external sources.
+        
+        Returns:
+            Dictionary containing suspicious domains, patterns, and indicators
+        """
         intel = {
             "suspicious_domains": set(),
             "phishing_patterns": set(),
-            "scam_indicators": set()
+            "scam_indicators": set(),
+            "last_updated": time.time()
         }
+        
+        timeout = getattr(settings, 'threat_intel_timeout', 30)
         
         # Add known phishing domains
         try:
-            with httpx.Client() as client:
+            with httpx.Client(timeout=timeout) as client:
                 # PhishTank
-                if hasattr(settings, 'phishtank_api_key') and settings.phishtank_api_key:
-                    r = client.get("http://data.phishtank.com/data/online-valid.json",
-                                headers={"Api-Key": settings.phishtank_api_key})
-                    data = r.json()
-                    for entry in data:
-                        intel["suspicious_domains"].add(urlparse(entry["url"]).netloc)
+                if getattr(settings, 'phishtank_api_key', None):
+                    try:
+                        r = client.get(
+                            "http://data.phishtank.com/data/online-valid.json",
+                            headers={"Api-Key": settings.phishtank_api_key}
+                        )
+                        r.raise_for_status()
+                        data = r.json()
+                        for entry in data:
+                            try:
+                                domain = urlparse(entry["url"]).netloc
+                                if domain:
+                                    intel["suspicious_domains"].add(domain)
+                            except Exception as e:
+                                logger.warning(f"Error parsing PhishTank URL: {str(e)}")
+                                
+                    except Exception as e:
+                        logger.error(f"Error fetching from PhishTank: {str(e)}")
                         
                 # OpenPhish
-                r = client.get("https://openphish.com/feed.txt")
-                for line in r.text.splitlines():
-                    if line.strip():
-                        intel["suspicious_domains"].add(urlparse(line.strip()).netloc)
+                try:
+                    r = client.get("https://openphish.com/feed.txt")
+                    r.raise_for_status()
+                    for line in r.text.splitlines():
+                        try:
+                            if line.strip():
+                                domain = urlparse(line.strip()).netloc
+                                if domain:
+                                    intel["suspicious_domains"].add(domain)
+                        except Exception as e:
+                            logger.warning(f"Error parsing OpenPhish URL: {str(e)}")
+                            
+                except Exception as e:
+                    logger.error(f"Error fetching from OpenPhish: {str(e)}")
+                    
         except Exception as e:
-            print(f"Error fetching external intel: {e}")
+            logger.error(f"Error fetching external intel: {str(e)}")
             
-        return {k: list(v) for k, v in intel.items()}  # Convert sets to lists for JSON serialization
+        # Convert sets to lists for JSON serialization
+        return {
+            "suspicious_domains": sorted(list(intel["suspicious_domains"])),
+            "phishing_patterns": sorted(list(intel["phishing_patterns"])),
+            "scam_indicators": sorted(list(intel["scam_indicators"])),
+            "last_updated": intel["last_updated"]
+        }
         
     def analyze_text(self, text: str) -> Dict:
         """

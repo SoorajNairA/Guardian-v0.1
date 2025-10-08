@@ -138,18 +138,11 @@ class GeminiResponse(BaseModel):
     candidates: List[GeminiCandidate]
 
 
-class ThreatAnalysis(BaseModel):
-    social_engineering_score: float = Field(ge=0.0, le=1.0)
-    scam_fraud_score: float = Field(ge=0.0, le=1.0)
-    malware_score: float = Field(ge=0.0, le=1.0)
-    credential_harvesting_score: float = Field(ge=0.0, le=1.0)
-
-class GeminiAnalysis(BaseModel):
-    is_ai_generated: bool
-    language: str
-    propaganda_disinformation_confidence: float = Field(ge=0.0, le=1.0)
-    threat_analysis: ThreatAnalysis
-    explanation: str
+class ThreatAnalysisResult(BaseModel):
+    threat_level: float = Field(ge=0.0, le=1.0)
+    threat_type: List[str]
+    justification: str
+    recommendation: Optional[str] = None
 
 
 

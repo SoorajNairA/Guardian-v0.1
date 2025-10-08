@@ -9,17 +9,21 @@ from .threat_intel import threat_intel
 
 # Category weights based on severity (higher = more severe)
 CATEGORY_WEIGHTS = {
-    "malware_instruction": 0.95,
-    "code_injection": 0.92,
-    "prompt_injection": 0.90,
-    "credential_harvesting": 0.88,
-    "financial_fraud": 0.85,
-    "phishing_attempt": 0.82,
-    "social_engineering": 0.80,
-    "toxic_content": 0.65,
-    "hate_speech": 0.68,
-    "misinformation": 0.60,
-    "self_harm_risk": 0.85,
+    "malware_instruction": 0.95,  # Highest risk - direct security threat
+    "code_injection": 0.92,       # Critical security vulnerability
+    "prompt_injection": 0.90,     # AI system manipulation
+    "credential_harvesting": 0.88, # Identity theft risk
+    "financial_fraud": 0.85,      # Direct financial impact
+    "phishing_attempt": 0.82,     # Account compromise risk
+    "social_engineering": 0.80,   # Manipulation tactics
+    "data_leakage": 0.78,        # Sensitive information exposure
+    "pii_disclosure": 0.75,       # Privacy violation
+    "toxic_content": 0.65,        # Community harm
+    "hate_speech": 0.68,         # Discriminatory content
+    "misinformation": 0.60,      # False information spread
+    "self_harm_risk": 0.85,      # Personal safety concern
+    "external_threat": 0.70,     # General security risk
+    "none": 0.0                  # No threat detected
 }
 
 # Graph-based threat intelligence analysis
@@ -486,14 +490,14 @@ async def analyze_text(
     attribution = None # TODO: Implement stylometric attribution
     
     metadata = AnalyzeMetadata(
-        is_ai_generated=gemini_result.get("is_ai_generated"),
+        is_ai_generated=None,  # Simplified for now
         language=detected_language,
         forensic_watermark=watermark_id,
         attribution=attribution,
         privacy_preserving=True,
         explainability="Detection performed using regex, stylometric, ML-based analysis, and Gemini AI analysis.",
-        gemini_analysis=gemini_result.get("analysis"),
-        propaganda_score=gemini_result.get("propaganda_disinformation_confidence")
+        gemini_analysis=gemini_result.justification if hasattr(gemini_result, 'justification') else None,
+        propaganda_score=None  # Simplified for now
     )
     
     # Calculate weighted risk score
@@ -603,20 +607,36 @@ async def analyze_text(
         enriched = {"risk_score": base_score, "threats": threats, "is_ai_generated": None, "language": detected_language}
 
     # Update metadata with Gemini results
-    metadata.is_ai_generated = enriched.get("is_ai_generated")
-    # Prefer detected language if Gemini returned a null/empty language
-    enriched_lang = enriched.get("language")
-    metadata.language = enriched_lang or detected_language
+    metadata.is_ai_generated = None  # Not part of current Gemini response
+    metadata.language = detected_language
     
     # Include Gemini's analysis in metadata
-    if "explanation" in enriched:
-        metadata.gemini_analysis = enriched.get("explanation")
-    elif "error" in enriched and settings.gemini_include_error_in_response:
-        metadata.gemini_error = enriched["error"]
+    if hasattr(enriched, 'justification'):
+        metadata.gemini_analysis = enriched.justification
+    elif hasattr(enriched, 'error') and settings.gemini_include_error_in_response:
+        metadata.gemini_error = enriched.error
     
+    # Convert Gemini response to our format
+    risk_score = int(enriched.threat_level * 100) if hasattr(enriched, 'threat_level') else base_score
+    threats_detected = []
+
+    # Add any existing threats
+    if threats:
+        threats_detected.extend(threats)
+
+    # Add Gemini's detected threat types
+    if hasattr(enriched, 'threat_type') and len(enriched.threat_type) > 0:
+        for threat_type in enriched.threat_type:
+            if threat_type not in ('none', 'safe'):  # Skip if no actual threat
+                threats_detected.append(Threat(
+                    category=threat_type,
+                    confidence_score=enriched.threat_level,
+                    details=enriched.justification if hasattr(enriched, 'justification') else None
+                ))
+
     return AnalyzeResult(
-        risk_score=enriched["risk_score"],
-        threats_detected=enriched["threats"],
+        risk_score=risk_score,
+        threats_detected=threats_detected,
         metadata=metadata,
     )
 

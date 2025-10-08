@@ -6,6 +6,7 @@ from typing import Any, Callable, Coroutine, Dict, Optional
 
 import os
 import redis.asyncio as redis
+from .logging_client import logger
 from fastapi import Request, Response
 from fastapi.responses import JSONResponse
 
@@ -77,15 +78,42 @@ class RedisRateLimiter:
 
 class MemoryRateLimiter:
     """An in-memory rate limiter for fallback purposes."""
+    
+    def __init__(self, cleanup_interval: int = 300):  # 5 minutes default
+        self.cleanup_interval = cleanup_interval
+        self.last_cleanup = time.time()
+        
+    def _cleanup_expired(self, now: int, max_age: int = 3600) -> None:
+        """Remove expired entries and clean up old keys"""
+        if now - self.last_cleanup < self.cleanup_interval:
+            return
+            
+        try:
+            # Remove expired timestamps from existing keys
+            for key in list(memory_store.keys()):
+                memory_store[key] = [t for t in memory_store[key] if now - t < max_age]
+                # Remove empty keys
+                if not memory_store[key]:
+                    del memory_store[key]
+            
+            self.last_cleanup = now
+        except Exception as e:
+            logger.error(f"Error during memory store cleanup: {str(e)}")
 
     def is_allowed(
         self, key: str, limit: int, window: int
     ) -> RateLimitResult:
         """Checks if a request is allowed using an in-memory store."""
         now = int(time.time())
+        
+        # Initialize empty list for new keys
         if key not in memory_store:
             memory_store[key] = []
-
+            
+        # Clean up expired entries periodically
+        self._cleanup_expired(now)
+        
+        # Remove expired timestamps for this key
         memory_store[key] = [t for t in memory_store[key] if now - t < window]
 
         current_count = len(memory_store[key])

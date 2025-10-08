@@ -18,6 +18,7 @@ import google.generativeai as genai
 from typing_extensions import TypeAlias, Literal
 
 from .config import settings
+from .models import ThreatAnalysisResult
 
 # Type definitions
 ThreatLevel = Literal["None", "Low", "Medium", "High", "Critical"]
@@ -372,7 +373,7 @@ def clean_cache():
         logger.error(f"Error during cache cleaning: {str(e)}")
         # Don't raise the exception - cache cleaning should not break the main functionality
 
-def forensic_watermark(text: str) -> str:
+def forensic_watermark(text: str) -> tuple[str, str]:
     """
     Add a timestamp and unique identifier watermark to the text for forensic purposes.
     
@@ -380,10 +381,12 @@ def forensic_watermark(text: str) -> str:
         text: The input text to watermark
         
     Returns:
-        Watermarked text with timestamp and UUID
+        Tuple of (watermark_id, watermarked_text)
     """
     timestamp = datetime.utcnow().isoformat()
-    return f"{text}\n[Analyzed: {timestamp} UTC]"
+    watermark_id = f"wm_{timestamp}"
+    watermarked_text = f"{text}\n[Analyzed: {timestamp} UTC]"
+    return watermark_id, watermarked_text
 
 def validate_response(response_data: Dict[str, Any], analysis_type: str = "comprehensive") -> bool:
     """
@@ -400,84 +403,62 @@ def validate_response(response_data: Dict[str, Any], analysis_type: str = "compr
         ResponseParsingException: If validation fails with specific reason
     """
     try:
+        # Convert Pydantic model to dict if needed
+        if hasattr(response_data, 'model_dump'):
+            response_data = response_data.model_dump()
+        elif hasattr(response_data, 'dict'):
+            response_data = response_data.dict()
+            
+        # Log the response structure being validated
+        logger.info(f"Validating response structure: {json.dumps(response_data, indent=2)}")
+        
         # Define required fields based on analysis type
         if analysis_type == "quick":
             required_fields = {
-                "threatLevel": str,
-                "primaryConcern": str,
-                "confidenceScore": (int, float)
+                "threat_level": float,
+                "threat_type": list,
+                "justification": str
             }
         else:
             required_fields = {
-                "threatLevel": str,
-                "categories": list,
-                "concerns": list,
-                "confidenceScore": (int, float),
-                "recommendations": list,
-                "metadata": dict
+                "threat_level": float,
+                "threat_type": list,
+                "justification": str,
+                "recommendation": str
             }
 
         # Check all required fields exist with correct types
         for field, expected_type in required_fields.items():
+            # Skip validation if the field is optional (recommendation) and the value is None
+            if field == 'recommendation' and response_data.get(field) is None:
+                continue
+                
             if field not in response_data:
+                logger.error(f"Field '{field}' missing from response. Available fields: {list(response_data.keys())}")
                 raise ResponseParsingException(f"Missing required field: {field}")
-            if not isinstance(response_data[field], expected_type):
+                
+            value = response_data[field]
+            if value is not None and not isinstance(value, expected_type):
+                logger.error(f"Field '{field}' has wrong type. Value: {value}, Type: {type(value)}, Expected: {expected_type}")
                 raise ResponseParsingException(
-                    f"Invalid type for {field}: expected {expected_type}, got {type(response_data[field])}"
+                    f"Invalid type for {field}: expected {expected_type}, got {type(value)}"
                 )
 
-        # Validate threatLevel values
-        valid_levels = {"None", "Low", "Medium", "High", "Critical"}
-        if response_data["threatLevel"] not in valid_levels:
+        # Validate threat_level value
+        threat_level = response_data["threat_level"]
+        if not (0 <= threat_level <= 1.0):
             raise ResponseParsingException(
-                f"Invalid threat level: {response_data['threatLevel']}. Must be one of {valid_levels}"
+                f"Threat level must be between 0.0 and 1.0, got {threat_level}"
             )
+            
+        # Validate threat_type
+        if not isinstance(response_data["threat_type"], list):
+            raise ResponseParsingException("threat_type must be a list")
 
-        # Validate confidenceScore
-        score = response_data["confidenceScore"]
-        if not (0 <= score <= 100):
-            raise ResponseParsingException(
-                f"Confidence score must be between 0 and 100, got {score}"
-            )
-
-        # Comprehensive validation for detailed analysis
-        if analysis_type == "comprehensive":
-            # Validate categories
-            if not response_data["categories"]:
-                raise ResponseParsingException("Categories list cannot be empty")
-            valid_categories = {
-                "phishing", "malware", "social_engineering", "fraud", "spam",
-                "data_theft", "credential_theft", "financial", "crypto_scam"
-            }
-            invalid_cats = [cat for cat in response_data["categories"] 
-                          if not any(valid.lower() in cat.lower() for valid in valid_categories)]
-            if invalid_cats:
-                logger.warning(f"Unknown threat categories detected: {invalid_cats}")
-
-            # Validate concerns
-            if not response_data["concerns"]:
-                raise ResponseParsingException("Concerns list cannot be empty")
-            if any(len(concern.strip()) < 10 for concern in response_data["concerns"]):
-                raise ResponseParsingException("Each concern must be adequately detailed (min 10 chars)")
-
-            # Validate recommendations
-            if not response_data["recommendations"]:
-                raise ResponseParsingException("Recommendations list cannot be empty")
-            if any(len(rec.strip()) < 15 for rec in response_data["recommendations"]):
-                raise ResponseParsingException("Each recommendation must be actionable (min 15 chars)")
-
-            # Validate metadata
-            required_metadata = {"analysisTimestamp", "modelVersion", "analysisType", "evidenceStrength"}
-            missing_metadata = required_metadata - set(response_data["metadata"].keys())
-            if missing_metadata:
-                raise ResponseParsingException(f"Missing required metadata fields: {missing_metadata}")
-
-        # Consistency checks
-        consistency_score = calculate_consistency_score(response_data)
-        if consistency_score < 0.7:  # 70% consistency threshold
-            raise ResponseParsingException(
-                f"Response shows internal inconsistency (score: {consistency_score:.2f})"
-            )
+        # Validate justification
+        justification = response_data["justification"]
+        if not justification or len(justification.strip()) < 10:
+            raise ResponseParsingException("Justification must be adequately detailed (min 10 chars)")
 
         return True
 
@@ -804,8 +785,12 @@ async def gemini_enrich(
                 analysis_type=analysis_type
             )
 
+            # Log raw response for debugging
+            result_dict = result.model_dump() if hasattr(result, 'model_dump') else result.dict()
+            logger.info(f"Raw Gemini response: {json.dumps(result_dict, indent=2)}")
+                
             # Basic result validation 
-            if not validate_response(result, analysis_type):
+            if not validate_response(result_dict, analysis_type):
                 raise ResponseParsingException("Invalid response format from analyzer")
                 
             # Cache successful result if requested

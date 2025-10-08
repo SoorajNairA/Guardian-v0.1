@@ -1,5 +1,5 @@
 import re
-from typing import Dict, List, Optional, Pattern
+from typing import Dict, List, Optional, Pattern, Any
 from .config import settings
 
 def compile_pii_patterns() -> Dict[str, Pattern]:
@@ -53,10 +53,21 @@ def apply_privacy_preserving_transforms(text: str) -> Dict[str, str]:
 def get_explainability_info(
     text: str,
     threats: List[dict],
-    graph_features: dict,
-    base_score: int
-) -> Dict[str, any]:
-    """Generate detailed explainability information based on configured detail level"""
+    graph_features: Optional[dict] = None,
+    base_score: Optional[int] = 0
+) -> Dict[str, Any]:
+    """
+    Generate detailed explainability information based on configured detail level.
+    
+    Args:
+        text: The input text being analyzed
+        threats: List of detected threats
+        graph_features: Optional graph analysis features
+        base_score: Optional base risk score
+        
+    Returns:
+        Dictionary containing explainability information
+    """
     if not settings.xai_enabled:
         return {}
         
@@ -74,10 +85,13 @@ def get_explainability_info(
         xai_info["threat_explanations"] = []
         for threat in threats:
             explanation = {
-                "category": threat.category,
-                "confidence": threat.confidence_score,
-                "reasoning": threat.details if hasattr(threat, 'details') else "",
-                "evidence": [m.pattern for m in threat.matched_patterns] if hasattr(threat, 'matched_patterns') else []
+                "category": getattr(threat, 'category', 'unknown'),
+                "confidence": getattr(threat, 'confidence_score', 0.0),
+                "reasoning": getattr(threat, 'details', ''),
+                "evidence": [
+                    getattr(m, 'pattern', str(m)) 
+                    for m in getattr(threat, 'matched_patterns', [])
+                ]
             }
             xai_info["threat_explanations"].append(explanation)
             
