@@ -1,303 +1,400 @@
 # Guardian Security Platform - Complete Setup Guide
 
 ## Overview
-This guide will help you set up the complete Guardian Security Platform with all services connected: Backend API, Frontend, Supabase Database, Redis, and Google Gemini AI.
+This guide provides detailed instructions for setting up the Guardian Security Platform. It covers both Docker-based deployment and manual setup options, making it suitable for both production and development environments.
 
 ## Prerequisites
-- Python 3.8+ installed
-- Node.js 16+ installed
+
+### Required
+- Python 3.11+ installed
+- Docker & Docker Compose (recommended)
 - Git installed
 - A Supabase account
-- A Google AI Studio account
-- Redis (local or cloud)
+- A Google AI Studio (Gemini) API key
 
-## Step 1: Set Up Supabase Database
+### Optional
+- Node.js 18+ (for frontend development)
+- Redis (for distributed deployments)
+- VS Code with Python extension (recommended for development)
 
-### 1.1 Create Supabase Project
-1. Go to [supabase.com](https://supabase.com)
-2. Sign up/login and create a new project
-3. Choose a region close to you
-4. Wait for the project to be ready (2-3 minutes)
+## Quick Start (Docker)
+For those who want to get started quickly:
 
-### 1.2 Set Up Database Schema
-1. In Supabase dashboard, go to **SQL Editor**
-2. Copy and paste the contents of `supabase/schema.sql`:
-3. Click **Run** to execute the schema
+```bash
+# Clone repository
+git clone https://github.com/SoorajNairA/Guardian-v0.1.git
+cd Guardian-v0.1
 
-### 1.3 Get Supabase Credentials
-1. Go to **Settings** > **API**
-2. Copy your:
-   - Project URL
-   - Anon public key
-   - Service role key (keep this secret!)
+# Copy and edit environment variables
+cp .env.example .env
 
-### 1.4 Add API Keys to Database
-1. Go to **SQL Editor** again
-2. Run the generated SQL from the key generator:
-```sql
-INSERT INTO public.api_keys (key_hash, hash_type, owner_email, status) VALUES
-('$argon2id$v=19$m=65536,t=3,p=4$8792Rg9XlApZR7rAxhN7dw$BsgpQ8nJJ3PE1quzNLzYGERBkmH1mTyshsgXNogNLn0', 'argon2', 'your-email@example.com', 'active'),
-('$argon2id$v=19$m=65536,t=3,p=4$4f9ktzj13k3++YONAbOVlQ$9+fifzSVingf8U6zv6/S0X0nNqrgEtVElngtj+rUCpk', 'argon2', 'your-email@example.com', 'active');
+# Start all services
+docker compose up -d
+
+# Verify the API
+curl -X POST "http://localhost:8000/v1/analyze" \
+     -H "Content-Type: application/json" \
+     -H "X-API-Key: your-api-key" \
+     -d '{"text": "Hello, world!"}'
 ```
 
-## Step 2: Set Up Redis
+For detailed setup instructions, continue reading below.
 
-### Option A: Local Redis (Development)
-**Windows:**
+## Detailed Setup Instructions
+
+## 1. Core Services Setup
+
+### 1.1 Supabase Database Setup
+
+1. **Create Supabase Project**
+   - Visit [supabase.com](https://supabase.com)
+   - Create a new project
+   - Note down your project URL and keys
+
+2. **Initialize Database**
+   ```bash
+   # Run schema migrations
+   psql -h your-db-host -U postgres -d postgres -f supabase/schema.sql
+   
+   # Or use Supabase Dashboard:
+   # 1. Go to SQL Editor
+   # 2. Copy contents of supabase/schema.sql
+   # 3. Execute
+   ```
+
+3. **Generate API Keys**
+   ```bash
+   # Use the provided script
+   python scripts/generate_api_keys.py --email your@email.com
+   
+   # Or use the web interface at /admin/keys
+   ```
+
+### 1.2 Google Gemini API Setup
+
+1. **Get API Key**
+   - Go to [Google AI Studio](https://aistudio.google.com)
+   - Create API key
+   - Add key to `.env` file
+
+2. **Configure Model Settings** (Optional)
+   ```env
+   GEMINI_MODEL=models/gemini-pro-latest
+   GEMINI_ENRICHMENT_ENABLED=True
+   GEMINI_INCLUDE_ERROR_IN_RESPONSE=True
+   ```
+
+### 1.3 Redis Setup (Optional)
+
+Choose one option:
+
+**A. Docker (Recommended)**
 ```bash
-# Using Chocolatey
+# Included in docker-compose.yml
+docker compose up -d redis
+```
+
+**B. Local Installation**
+```bash
+# Windows (PowerShell Admin)
 choco install redis-64
-
-# Or download from: https://github.com/microsoftarchive/redis/releases
-# Start Redis
 redis-server
-```
 
-**macOS:**
-```bash
+# macOS
 brew install redis
 brew services start redis
-```
 
-**Linux:**
-```bash
-sudo apt-get install redis-server
+# Linux
+sudo apt install redis-server
 sudo systemctl start redis
 ```
 
-### Option B: Redis Cloud (Production)
-1. Go to [redis.com](https://redis.com)
-2. Create free account and instance
-3. Note down connection URL
+**C. Redis Cloud**
+- Visit [redis.com](https://redis.com)
+- Create free account
+- Get connection URL
 
-## Step 3: Set Up Google Gemini API
+## 2. Environment Configuration
 
-1. Go to [Google AI Studio](https://aistudio.google.com)
-2. Sign in with Google account
-3. Click **Get API Key** > **Create API Key**
-4. Copy the generated API key
+### 2.1 Basic Configuration
+Copy and edit the environment template:
+```bash
+cp .env.example .env
+```
 
-## Step 4: Configure Environment Variables
-
-Update the `.env` file in `api/` directory with your actual credentials:
-
+### 2.2 Required Variables
 ```env
-# Environment
+# Core Settings
 ENV=development
+PORT=8000
 
-# API Keys (already generated)
-GUARDIAN_API_KEYS=WgJOVvPJPe1E7RIy1FvIMbbWFyvEixeE,NN4vXI5yALPdGi5H3vqeBjGhbcVxd04K
+# API Security
+GUARDIAN_API_KEYS=your-generated-keys
+API_KEY_HASH_TYPE=argon2
 
-# Supabase Configuration (replace with your actual values)
-SUPABASE_URL=https://your-project-id.supabase.co
-SUPABASE_ANON_KEY=your-anon-key
-SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+# Database
+SUPABASE_URL=your-project-url
+SUPABASE_SERVICE_ROLE_KEY=your-service-key
 
-# Redis Configuration
+# AI Integration
+GEMINI_API_KEY=your-gemini-key
+GEMINI_MODEL=models/gemini-pro-latest
+
+# Optional Redis
 REDIS_URL=redis://localhost:6379/0
 REDIS_PASSWORD=
 REDIS_SSL=False
+```
 
-# Gemini Configuration (replace with your actual key)
-GEMINI_API_KEY=your-gemini-api-key
-GEMINI_MODEL=gemini-1.5-flash
-
-# Rate Limiting
+### 2.3 Optional Settings
+```env
+# Performance Tuning
 RATE_LIMIT_ENABLED=True
-RATE_LIMIT_FALLBACK_TO_MEMORY=True
-DEFAULT_RATE_LIMIT_PER_KEY=100
-DEFAULT_RATE_LIMIT_PER_IP=1000
-RATE_LIMIT_WINDOW_SECONDS=60
+RATE_LIMIT_REQUESTS=100
+RATE_LIMIT_WINDOW=60
 
-# Health Checks
-HEALTH_CHECK_TIMEOUT_SECONDS=5
-HEALTH_CHECK_SUPABASE_ENABLED=True
-HEALTH_CHECK_REDIS_ENABLED=True
-HEALTH_CHECK_GEMINI_ENABLED=True
+# Caching
+CACHE_ENABLED=True
+CACHE_TTL=300
 
 # Logging
 LOG_LEVEL=INFO
-LOG_TO_FILE=False
+STRUCTURED_LOGGING=True
 
-# Metrics
-METRICS_ENABLED=True
-PROMETHEUS_METRICS_ENABLED=True
-PROMETHEUS_METRICS_PORT=8001
-
-# Alerting (optional)
-ALERTING_ENABLED=False
-ALERT_WEBHOOK_URL=
+# Privacy
+PRIVACY_MODE=standard  # minimal, standard, or strict
 ```
 
-## Step 5: Install and Run Backend
+## 3. Running the Services
 
+### 3.1 Development Setup
+
+**A. Docker Compose (Recommended)**
 ```bash
-# Navigate to API directory
-cd api
+# Start all services
+docker compose up -d
 
+# View logs
+docker compose logs -f api
+
+# Stop services
+docker compose down
+```
+
+**B. Local Development**
+```bash
 # Install dependencies
+cd api
 pip install -r requirements.txt
 
-# Run the API server
-uvicorn app.main:app --reload --port 8000
-```
+# Start API server
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
-The API will be available at:
-- **API**: http://localhost:8000
-- **Docs**: http://localhost:8000/docs
-- **Health**: http://localhost:8000/health
-- **Metrics**: http://localhost:8001/metrics
-
-## Step 6: Install and Run Frontend
-
-```bash
-# Navigate to Frontend directory
+# Start frontend (separate terminal)
 cd Frontend
-
-# Install dependencies
 npm install
-
-# Start development server
 npm run dev
 ```
 
-The frontend will be available at: http://localhost:5173
+### 3.2 Production Deployment
 
-## Step 7: Test the Complete Setup
-
-### 7.1 Test API Health
+**A. Docker Deployment**
 ```bash
-curl http://localhost:8000/health
+# Build optimized image
+docker build -t guardian-api:latest ./api
+
+# Run with production settings
+docker run -d \
+  --name guardian-api \
+  -p 8000:8000 \
+  -v /path/to/logs:/app/logs \
+  --env-file .env.prod \
+  guardian-api:latest
 ```
 
-### 7.2 Test Analysis Endpoint
+**B. Kubernetes Deployment**
 ```bash
-curl -X POST "http://localhost:8000/v1/analyze" \
-  -H "X-API-Key: WgJOVvPJPe1E7RIy1FvIMbbWFyvEixeE" \
-  -H "Content-Type: application/json" \
-  -d '{"text": "This is a test message for threat detection"}'
+# Apply configurations
+kubectl apply -f k8s/
+
+# Check status
+kubectl get pods -l app=guardian-api
+
+# View logs
+kubectl logs -f deployment/guardian-api
 ```
 
-### 7.3 Test Frontend
-1. Open http://localhost:5173
-2. Enter an API key: `WgJOVvPJPe1E7RIy1FvIMbbWFyvEixeE`
-3. Enter some text to analyze
-4. Click "Analyze Text"
+## 4. Testing & Validation
 
-## Step 8: Run Tests
+### 4.1 Verify Installation
 
+1. Check API Health:
 ```bash
-# From project root
-cd "C:\SIH Project\Guardian-v0.1"
-
-# Run all tests
-pytest -vv tests
-
-# Run specific test categories
-pytest -vv tests/test_api_endpoints.py
-pytest -vv tests/test_auth.py
-pytest -vv tests/test_analyze.py
+curl http://localhost:8000/healthz
 ```
 
-## Troubleshooting
+2. Verify Services:
+```bash
+# Check Supabase connection
+curl http://localhost:8000/healthz/supabase
 
-### Common Issues
+# Check Redis if enabled
+curl http://localhost:8000/healthz/redis
 
-1. **Redis Connection Error**
-   - Make sure Redis is running: `redis-server`
-   - Check Redis URL in .env file
+# Check Gemini integration
+curl http://localhost:8000/healthz/gemini
+```
 
-2. **Supabase Connection Error**
-   - Verify SUPABASE_URL and keys are correct
-   - Check if database schema was applied
+3. Verify Frontend:
+```bash
+# Check if frontend is running
+curl http://localhost:5173
+```
 
-3. **Gemini API Error**
-   - Verify GEMINI_API_KEY is correct
-   - Check API quota limits
+## 5. Monitoring & Troubleshooting
 
-4. **Rate Limiting Issues**
-   - Check Redis connection
-   - Verify rate limit settings in .env
+### 5.1 Health Checks
+```bash
+# Basic health
+curl http://localhost:8000/healthz
 
-5. **Frontend Not Loading**
-   - Check if backend is running on port 8000
-   - Verify API key is correct
+# Component status
+curl http://localhost:8000/healthz/detail
+```
 
-### Health Check Endpoints
+### 5.2 Metrics
+- Prometheus: http://localhost:8000/metrics 
+- Dashboard: http://localhost:8000/dashboard
 
-- **Overall Health**: http://localhost:8000/health
-- **Supabase**: http://localhost:8000/health/supabase
-- **Redis**: http://localhost:8000/health/redis
-- **Gemini**: http://localhost:8000/health/gemini
+### 5.3 Common Issues
 
-## Production Deployment
+1. **Redis Connection Errors**
+   - Check Redis is running: `redis-cli ping`
+   - Verify URL in .env matches Redis host/port
+   - Check network connectivity & SSL settings
 
-For production deployment:
+2. **Supabase Issues**
+   - Verify credentials in .env
+   - Check database schema is applied
+   - Test connection: `curl $SUPABASE_URL/rest/v1/`
 
-1. **Environment Variables**: Use proper secrets management
-2. **Database**: Use production Supabase instance
-3. **Redis**: Use Redis Cloud or managed Redis
-4. **API Keys**: Rotate regularly and use strong keys
-5. **Monitoring**: Enable Prometheus metrics and alerting
-6. **SSL**: Use HTTPS for all endpoints
-7. **Rate Limiting**: Adjust limits based on usage
+3. **Gemini API Issues** 
+   - Validate API key is active
+   - Check quota/rate limits
+   - Verify model name is correct
 
-## API Usage Examples
+4. **Rate Limiting**
+   - Check Redis rate limit keys
+   - Adjust limits in configuration
+   - Monitor usage patterns
+
+### 5.4 Logs
+```bash
+# View API logs
+tail -f logs/guardian-api.log
+
+# Structured logging 
+jq '.' logs/guardian-api.jsonl
+
+# Docker container logs
+docker compose logs -f api
+```
+
+## 6. SDKs & API Usage
 
 ### Python SDK
 ```python
 from guardian_sdk import GuardianClient
 
 client = GuardianClient(
-    api_key="WgJOVvPJPe1E7RIy1FvIMbbWFyvEixeE",
+    api_key="YOUR_API_KEY",
     base_url="http://localhost:8000"
 )
 
-result = client.analyze("Suspicious text here")
-print(f"Risk Score: {result.risk_score}")
-print(f"Threats: {result.threats_detected}")
+# Basic analysis
+result = client.analyze_text("Test message")
+print(result.risk_score)
+
+# With configuration
+result = client.analyze_text(
+    text="Test message",
+    config={
+        "model": "v2",
+        "privacy_level": "high"
+    }
+)
 ```
 
 ### Node.js SDK
 ```javascript
-const GuardianClient = require('guardian-sdk');
+const { GuardianClient } = require('@guardian/sdk');
 
 const client = new GuardianClient({
-    apiKey: 'WgJOVvPJPe1E7RIy1FvIMbbWFyvEixeE',
-    baseUrl: 'http://localhost:8000'
+  apiKey: 'YOUR_API_KEY',
+  baseUrl: 'http://localhost:8000'
 });
 
-const result = await client.analyze('Suspicious text here');
-console.log('Risk Score:', result.risk_score);
-console.log('Threats:', result.threats_detected);
+// Basic analysis
+const result = await client.analyzeText('Test message');
+console.log(result.riskScore);
+
+// With configuration
+const result = await client.analyzeText('Test message', {
+  model: 'v2',
+  privacyLevel: 'high'
+});
 ```
 
 ### Direct API Calls
 ```bash
+# Basic analysis
 curl -X POST "http://localhost:8000/v1/analyze" \
-  -H "X-API-Key: WgJOVvPJPe1E7RIy1FvIMbbWFyvEixeE" \
+  -H "X-API-Key: YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"text": "Test message"}'
+
+# With configuration
+curl -X POST "http://localhost:8000/v1/analyze" \
+  -H "X-API-Key: YOUR_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "text": "Click here to reset your password immediately!",
+    "text": "Test message",
     "config": {
-      "model_version": "v1",
-      "compliance_mode": "strict"
+      "model": "v2",
+      "privacy_level": "high"
     }
   }'
 ```
 
-## Next Steps
+## 7. Next Steps
 
-1. **Customize Threat Patterns**: Edit `api/app/classifier.py`
-2. **Add New Integrations**: Extend the API endpoints
-3. **Set Up Monitoring**: Configure Prometheus and Grafana
-4. **Deploy to Cloud**: Use Docker, Kubernetes, or cloud services
-5. **Scale**: Add load balancers and multiple instances
+### 7.1 Production Readiness
+1. Set up SSL/TLS
+2. Configure proper secrets management
+3. Implement automated backups
+4. Set up monitoring & alerting
+5. Document incident response
+
+### 7.2 Feature Development
+1. Customize threat detection rules
+2. Add new AI model integrations
+3. Implement advanced analytics
+4. Create admin dashboard
+5. Add batch processing support
+
+### 7.3 Scaling
+1. Deploy multiple API instances
+2. Set up load balancing
+3. Implement caching
+4. Optimize database queries
+5. Monitor performance metrics
 
 ## Support
 
-If you encounter issues:
-1. Check the logs in the terminal
-2. Verify all services are running
-3. Test individual components using health endpoints
-4. Review the troubleshooting section above
+Need help? 
+
+1. Check documentation: `/docs/` directory
+2. Run health checks: `/healthz/detail`
+3. Review logs: `logs/guardian-api.log`
+4. Open issues on GitHub
+5. Contact maintainers

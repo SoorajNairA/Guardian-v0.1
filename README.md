@@ -2,102 +2,202 @@
 
 **Guardian** is a high-performance, AI-powered API for real-time threat detection in text content. It provides a robust, scalable, and easy-to-integrate solution for identifying a wide range of security risks before they can harm your users or your platform.
 
-[![CI](https://github.com/your-org/guardian/actions/workflows/ci.yml/badge.svg)](https://github.com/your-org/guardian/actions/workflows/ci.yml)
-
 ## Table of Contents
 
 - [Key Features](#key-features)
 - [Threat Detection Categories](#threat-detection-categories)
 - [System Architecture](#system-architecture)
-- [Getting Started](#getting-started)
+- [Quick Start](#quick-start)
   - [Requirements](#requirements)
-  - [Environment Variables](#environment-variables)
-  - [Running the API Locally](#running-the-api-locally)
-- [Documentation](#documentation)
+  - [Installation](#installation)
+  - [Basic Usage](#basic-usage)
+- [Detailed Documentation](#detailed-documentation)
 - [SDKs](#sdks)
 - [Deployment](#deployment)
-- [Monitoring & Observability](#monitoring--observability)
+- [Development](#development)
 - [Testing](#testing)
 - [Contributing](#contributing)
 - [License](#license)
 
 ## Key Features
 
-- **Comprehensive Threat Detection**: Identifies 14 categories of threats, from phishing and malware instructions to PII exfiltration and prompt injection.
-- **Multi-Language Support**: Core detection patterns are optimized for English, Spanish, French, German, and Portuguese.
-- **AI-Powered Enrichment**: Uses Google's Gemini model to provide deeper analysis, confidence scoring, and AI-generated text detection.
-- **High Performance**: Built with FastAPI and designed for low-latency, high-throughput workloads.
-- **Scalable & Resilient**: Features distributed rate limiting, caching, and robust error handling with automatic retries.
-- **Production-Ready**: Comes with structured logging, comprehensive monitoring, and a flexible alerting system.
-- **Easy Integration**: Provides official Python and Node.js SDKs with a clean, modern API.
+- **Real-time Threat Analysis**: Millisecond-level response times for immediate threat detection
+- **Advanced AI Integration**: Powered by Google's Gemini model for sophisticated content analysis
+- **Multi-Layer Detection**:
+  - Pattern-based analysis for known threats
+  - ML-based classification for emerging threats
+  - AI-powered contextual understanding
+  - Graph-based entity correlation
+- **Comprehensive Coverage**: Identifies 14+ categories of threats and security risks
+- **Privacy-First Design**: 
+  - Optional PII redaction
+  - Configurable privacy modes
+  - Data minimization principles
+- **Enterprise Features**:
+  - Distributed rate limiting
+  - Result caching
+  - Automatic retries
+  - Load balancing
+  - Health monitoring
+  - Prometheus metrics
 
 ## Threat Detection Categories
 
-Guardian detects the following 14 threat categories. For a detailed explanation of each, please see the [Threat Detection Guide](./docs/threat-detection-guide.md).
+Guardian's multi-layered detection system covers:
 
-1.  `phishing_attempt`
-2.  `social_engineering`
-3.  `credential_harvesting`
-4.  `financial_fraud`
-5.  `malware_instruction`
-6.  `code_injection`
-7.  `prompt_injection`
-8.  `pii_exfiltration`
-9.  `privacy_violation`
-10. `toxic_content`
-11. `hate_speech`
-12. `misinformation`
-13. `self_harm_risk`
-14. `jailbreak_prompting`
+1. **Security Threats**
+   - 🎣 Phishing attempts
+   - 🔐 Credential harvesting
+   - 🦠 Malware distribution
+   - 💉 Code injection
+   - 🎭 Social engineering
 
-## System Architecture
+2. **Privacy Risks**
+   - 🔒 PII exposure
+   - 📄 Data leakage
+   - 🕵️ Privacy violations
+   - 🎯 Targeting attempts
 
-The API is built around a high-performance, asynchronous core using FastAPI. Key components include:
+3. **AI-Specific Threats**
+   - 🤖 Prompt injection
+   - 🔓 Jailbreak attempts
+   - 🎯 Model manipulation
+   - ⚠️ Unsafe instructions
 
-- **Classifier**: A multi-layered detection engine combining optimized regex patterns and AI.
-- **Redis**: Used for distributed rate limiting and caching of analysis results.
-- **Supabase**: A PostgreSQL database used for persistent logging and API key management.
-- **Gemini**: Google's LLM used for AI enrichment and advanced analysis.
+4. **Content Risks**
+   - 🚫 Toxic content
+   - 💢 Hate speech
+   - ❌ Misinformation
+   - ⚠️ Self-harm risks
 
-## Getting Started
+## Quick Start
 
 ### Requirements
 
 - Python 3.11+
 - Docker & Docker Compose
-- A Supabase project (or a standard PostgreSQL database)
-- A Redis instance
-- A Google AI (Gemini) API key
+- Supabase account or PostgreSQL database
+- Redis (optional, for rate limiting)
+- Google AI (Gemini) API key
 
-### Development Setup
+### Installation
 
-To get started with development and testing, you need to install the Python SDK in "editable" mode. This allows you to test changes to the SDK without having to reinstall it every time.
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/SoorajNairA/Guardian-v0.1.git
+   cd Guardian-v0.1
+   ```
 
-1.  **Automated Setup**:
+2. **Setup Options**
 
-    Run the development setup script to install all dependencies and the SDK in one go:
+   **Option A: Using Docker (Recommended)**
+   ```bash
+   # Copy and edit environment variables
+   cp .env.example .env
 
-    ```bash
-    python setup_dev.py
-    ```
+   # Start all services
+   docker compose up -d
+   ```
 
-2.  **Manual Setup**:
+   **Option B: Manual Setup**
+   ```bash
+   # Create and activate virtual environment
+   python -m venv .venv
+   source .venv/bin/activate  # Linux/macOS
+   # or
+   .venv\Scripts\activate     # Windows
 
-    If you prefer to set up the environment manually, follow these steps:
+   # Install dependencies
+   pip install -r api/requirements.txt
+   pip install -r api/requirements-dev.txt  # if developing
 
-    ```bash
-    # Install the Python SDK in development mode
-    pip install -e ./sdk/python
+   # Install SDK in development mode (if developing)
+   pip install -e sdk/python
 
-    # Install development and testing dependencies
-    pip install -r api/requirements-dev.txt
-    ```
+   # Copy and edit environment variables
+   cp .env.example .env
+   ```
 
-3.  **Verify Installation**:
+### Basic Usage
 
-    After installation, you should be able to import the `guardian_sdk` in your Python environment:
+```python
+from guardian_sdk import Guardian
 
-    ```python
+# Initialize client
+guardian = Guardian(api_key="your-api-key")
+
+# Analyze text
+result = guardian.analyze("Text to analyze")
+
+# Check results
+if result.risk_score > 70:
+    print(f"High risk content detected! Score: {result.risk_score}")
+    for threat in result.threats_detected:
+        print(f"- {threat.category}: {threat.details}")
+```
+
+## Development
+
+### Local Development Setup
+
+1. **Install dependencies**
+   ```bash
+   pip install -r api/requirements-dev.txt
+   pip install -e sdk/python
+   ```
+
+2. **Start development server**
+   ```bash
+   uvicorn api.app.main:app --reload
+   ```
+
+3. **Run tests**
+   ```bash
+   pytest tests/
+   ```
+
+### Architecture Overview
+
+The system consists of several key components:
+
+- **FastAPI Backend**: High-performance async API
+- **Classifier Engine**: Multi-layered threat detection
+- **Gemini Integration**: AI-powered analysis
+- **Redis Cache**: Rate limiting and result caching
+- **Supabase**: API key management and logging
+
+## Testing
+
+Guardian includes comprehensive test suites:
+
+- Unit tests
+- Integration tests
+- Performance tests
+- Load tests
+- Security tests
+
+Run tests with:
+```bash
+pytest tests/  # All tests
+pytest tests/test_classifier_comprehensive.py  # Specific module
+```
+
+## Metrics & Monitoring
+
+Guardian exposes metrics at `/metrics` in Prometheus format:
+- Request rates and latencies
+- Cache hit/miss ratios
+- Error rates and types
+- Threat detection statistics
+- System health indicators
+
+## Contributing
+
+We welcome contributions! Please see [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines.
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](./LICENSE) file for details.
     try:
         from guardian_sdk import Guardian
         print("SDK installed successfully!")
