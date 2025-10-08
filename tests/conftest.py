@@ -13,12 +13,31 @@ from fastapi.testclient import TestClient
 from redis.asyncio import Redis as AsyncRedis
 import redis
 
-# Import config module
+# Add project root and API directory to Python path
 import sys
-import os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'api'))
+from pathlib import Path
+
+project_root = str(Path(__file__).parent.parent)
+api_path = str(Path(__file__).parent.parent / 'api')
+
+if project_root not in sys.path:
+    sys.path.append(project_root)
+if api_path not in sys.path:
+    sys.path.insert(0, api_path)
+
 from app import config
 from app.main import app
+
+# Configure pytest-asyncio settings in pytest.ini instead of here
+def pytest_configure(config):
+    """Configure pytest for the test suite."""
+    # Register custom markers
+    for marker in [
+        "integration: mark test as an integration test",
+        "performance: mark test as a performance test",
+        "slow: marks tests as slow running",
+    ]:
+        config.addinivalue_line("markers", marker)
 
 # Fixture to verify SDK installation
 @pytest.fixture(scope="session")

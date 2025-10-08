@@ -16,8 +16,8 @@ class Settings:
 
         # Gemini
         self.gemini_api_key = os.getenv("GEMINI_API_KEY", "")
-        # Use '-latest' by default to avoid 404s on model lookups
-        self.gemini_model = os.getenv("GEMINI_MODEL", "gemini-1.5-flash-latest")
+        # Use latest stable model by default
+        self.gemini_model = os.getenv("GEMINI_MODEL", "models/gemini-pro-latest")
         self.gemini_enrichment_enabled = os.getenv("GEMINI_ENRICHMENT_ENABLED", "True").lower() in ("true", "1", "t")
         self.gemini_include_error_in_response = os.getenv("GEMINI_INCLUDE_ERROR_IN_RESPONSE", "False").lower() in ("true", "1", "t")
 
@@ -68,6 +68,27 @@ class Settings:
         self.alert_critical_error_threshold = int(os.getenv("ALERT_CRITICAL_ERROR_THRESHOLD", "10"))
         self.alert_latency_threshold_ms = int(os.getenv("ALERT_LATENCY_THRESHOLD_MS", "5000"))
         self.alert_error_rate_threshold_percent = float(os.getenv("ALERT_ERROR_RATE_THRESHOLD_PERCENT", "5.0"))
+
+        # External Threat Intelligence
+        self.phishtank_api_key = os.getenv("PHISHTANK_API_KEY", "")
+        self.openphish_enabled = os.getenv("OPENPHISH_ENABLED", "True").lower() in ("true", "1", "t")
+        self.threat_intel_cache_ttl = int(os.getenv("THREAT_INTEL_CACHE_TTL", "86400"))  # 24 hours
+        self.enable_external_threat_intel = os.getenv("ENABLE_EXTERNAL_THREAT_INTEL", "True").lower() in ("true", "1", "t")
+
+        # Privacy and Compliance
+        self.privacy_mode = os.getenv("PRIVACY_MODE", "standard")  # standard, strict, or minimal
+        self.data_retention_days = int(os.getenv("DATA_RETENTION_DAYS", "30"))
+        self.pii_redaction_enabled = os.getenv("PII_REDACTION_ENABLED", "True").lower() in ("true", "1", "t")
+        self.pii_patterns = self._split_env_list(os.getenv("PII_PATTERNS", "email,phone,ip,credit_card,ssn"))
+        self.compliance_mode = os.getenv("COMPLIANCE_MODE", "standard")  # standard, gdpr, hipaa, ccpa
+        self.audit_logging_enabled = os.getenv("AUDIT_LOGGING_ENABLED", "True").lower() in ("true", "1", "t")
+        self.encryption_key = os.getenv("ENCRYPTION_KEY", "")  # For encrypting sensitive metadata
+        self.metadata_encryption_enabled = os.getenv("METADATA_ENCRYPTION_ENABLED", "True").lower() in ("true", "1", "t")
+
+        # Explainability
+        self.xai_enabled = os.getenv("XAI_ENABLED", "True").lower() in ("true", "1", "t")
+        self.xai_detail_level = os.getenv("XAI_DETAIL_LEVEL", "medium")  # minimal, medium, full
+        self.store_analysis_artifacts = os.getenv("STORE_ANALYSIS_ARTIFACTS", "False").lower() in ("true", "1", "t")
 
     @staticmethod
     def _split_env_list(value: str) -> List[str]:

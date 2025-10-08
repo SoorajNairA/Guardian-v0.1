@@ -102,6 +102,14 @@ class AnalyzeMetadata(BaseModel):
     is_ai_generated: Optional[bool] = None
     language: Optional[str] = None
     gemini_error: Optional[str] = None
+    forensic_watermark: Optional[str] = None
+    attribution: Optional[str] = None
+    privacy_preserving: Optional[bool] = None
+    explainability: Optional[str] = None
+    graph_entities: Optional[list] = None
+    graph_score: Optional[float] = None
+    gemini_analysis: Optional[str] = None  # Detailed analysis from Gemini
+    propaganda_score: Optional[float] = Field(None, ge=0.0, le=1.0)  # Propaganda/disinformation confidence from Gemini
 
 
 class AnalyzeResult(BaseModel):
@@ -130,10 +138,18 @@ class GeminiResponse(BaseModel):
     candidates: List[GeminiCandidate]
 
 
+class ThreatAnalysis(BaseModel):
+    social_engineering_score: float = Field(ge=0.0, le=1.0)
+    scam_fraud_score: float = Field(ge=0.0, le=1.0)
+    malware_score: float = Field(ge=0.0, le=1.0)
+    credential_harvesting_score: float = Field(ge=0.0, le=1.0)
+
 class GeminiAnalysis(BaseModel):
-    propaganda_disinformation_confidence: float = Field(ge=0.0, le=1.0)
     is_ai_generated: bool
     language: str
+    propaganda_disinformation_confidence: float = Field(ge=0.0, le=1.0)
+    threat_analysis: ThreatAnalysis
+    explanation: str
 
 
 
