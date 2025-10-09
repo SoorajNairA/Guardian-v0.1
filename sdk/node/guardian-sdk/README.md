@@ -16,7 +16,7 @@ This SDK includes:
 Install the SDK using npm or yarn:
 
 ```bash
-npm install @guardian/sdk
+npm install @soorajnair282005/guardian_sdk
 # or
 yarn add @guardian/sdk
 ```
